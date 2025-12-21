@@ -379,10 +379,19 @@
   margin-bottom: 1rem;
 }
 
-.threat-header h3 {
+.threat-card .threat-header h3 {
   font-size: 1.25rem;
   color: #fff;
   flex: 1;
+  margin-bottom: 0.5rem;
+}
+
+.threat-actor {
+  display: block;
+  font-size: 0.875rem;
+  color: #667eea;
+  font-weight: normal;
+  margin-top: 0.25rem;
 }
 
 .severity-badge {
