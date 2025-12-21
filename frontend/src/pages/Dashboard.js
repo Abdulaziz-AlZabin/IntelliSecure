@@ -45,12 +45,13 @@ const Dashboard = () => {
     if (!token) return;
 
     try {
-      const [statsRes, attacksRes, insightsRes, analyticsRes, timelineRes] = await Promise.all([
+      const [statsRes, attacksRes, insightsRes, analyticsRes, timelineRes, geoRes] = await Promise.all([
         axios.get(`${API}/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/dashboard/attacks?severity=${severityFilter}`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/insights`),
         axios.get(`${API}/dashboard/analytics`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/dashboard/timeline`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API}/dashboard/timeline`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/dashboard/geo-map`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       setStats(statsRes.data);
@@ -58,6 +59,7 @@ const Dashboard = () => {
       setInsights(insightsRes.data);
       setAnalytics(analyticsRes.data);
       setTimeline(timelineRes.data);
+      setGeoData(geoRes.data);
     } catch (error) {
       console.error('Error loading dashboard:', error);
       if (error.response?.status === 401) {
