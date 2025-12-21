@@ -288,6 +288,13 @@
   color: #fff;
 }
 
+.stat-trend {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.25rem;
+  display: block;
+}
+
 .profile-summary {
   background: rgba(26, 26, 46, 0.6);
   border: 1px solid rgba(102, 126, 234, 0.2);
