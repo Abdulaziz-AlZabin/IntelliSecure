@@ -520,13 +520,105 @@
 
 /* Rules Dialog */
 .rules-dialog {
-  max-width: 800px;
-  max-height: 80vh;
+  max-width: 900px;
+  max-height: 85vh;
   overflow-y: auto;
 }
 
 .rules-content {
   margin-top: 1rem;
+}
+
+.mitre-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(15, 15, 26, 0.8);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 0.75rem;
+}
+
+.mitre-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mitre-tag {
+  padding: 0.25rem 0.75rem;
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 100px;
+  font-size: 0.75rem;
+  color: #667eea;
+}
+
+.rules-actions {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mitigations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mitigation-card {
+  padding: 1rem;
+  background: rgba(15, 15, 26, 0.8);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+}
+
+.mitigation-card h4 {
+  font-size: 1rem;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.mitigation-card p {
+  font-size: 0.875rem;
+  color: #a0aec0;
+  line-height: 1.6;
+}
+
+/* Profile Dialog */
+.profile-dialog {
+  max-width: 600px;
+}
+
+.profile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: rgba(15, 15, 26, 0.6);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+}
+
+.profile-label {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.profile-value {
+  color: #e5e5ea;
+  text-align: right;
 }
 
 .rules-tabs {
