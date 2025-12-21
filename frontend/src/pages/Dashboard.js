@@ -26,6 +26,7 @@ const Dashboard = () => {
   const [insights, setInsights] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [timeline, setTimeline] = useState([]);
+  const [geoData, setGeoData] = useState(null);
   const [selectedAttack, setSelectedAttack] = useState(null);
   const [rules, setRules] = useState({ yara_rules: [], sigma_rules: [], mitigations: [], mitre_tactics: [] });
   const [loading, setLoading] = useState(true);
