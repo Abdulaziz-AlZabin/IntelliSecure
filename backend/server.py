@@ -350,6 +350,67 @@ async def get_timeline(current_user: dict = Depends(get_current_user)):
     
     return timeline
 
+@api_router.get("/dashboard/geo-map")
+async def get_geo_map(current_user: dict = Depends(get_current_user)):
+    """Get geographic distribution of attacks"""
+    profile = await db.profiles.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Get all attacks with location data
+    matched_attacks = await db.user_attacks.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Region to coordinates mapping
+    region_coords = {
+        "North America": {"lat": 40.7128, "lon": -74.0060, "name": "New York, USA"},
+        "Europe": {"lat": 51.5074, "lon": -0.1278, "name": "London, UK"},
+        "Asia": {"lat": 35.6762, "lon": 139.6503, "name": "Tokyo, Japan"},
+        "Middle East": {"lat": 25.2048, "lon": 55.2708, "name": "Dubai, UAE"},
+        "Latin America": {"lat": -23.5505, "lon": -46.6333, "name": "São Paulo, Brazil"},
+        "Africa": {"lat": -1.2864, "lon": 36.8172, "name": "Nairobi, Kenya"},
+        "Oceania": {"lat": -33.8688, "lon": 151.2093, "name": "Sydney, Australia"},
+        "Global": {"lat": 0, "lon": 0, "name": "Global"}
+    }
+    
+    # Aggregate attacks by region
+    location_data = {}
+    for attack in matched_attacks:
+        # Get attack details to find regions
+        attack_details = await db.attacks.find_one({"id": attack.get("attack_id")}, {"_id": 0})
+        if attack_details:
+            regions = attack_details.get('tags', {}).get('regions', ['Global'])
+            for region in regions:
+                if region not in location_data:
+                    location_data[region] = {
+                        "region": region,
+                        "coordinates": region_coords.get(region, {"lat": 0, "lon": 0, "name": region}),
+                        "attacks": [],
+                        "total": 0,
+                        "critical": 0,
+                        "high": 0,
+                        "medium": 0,
+                        "low": 0
+                    }
+                
+                location_data[region]["attacks"].append({
+                    "id": attack.get('id'),
+                    "name": attack.get('name'),
+                    "severity": attack.get('severity'),
+                    "discovered_at": attack.get('discovered_at')
+                })
+                location_data[region]["total"] += 1
+                
+                severity = attack.get('severity', 'Low')
+                location_data[region][severity.lower()] += 1
+    
+    return {
+        "user_region": profile.get('region'),
+        "locations": list(location_data.values())
+    }
+
 @api_router.post("/dashboard/export-rules/{attack_id}")
 async def export_rules(attack_id: str, rule_type: str, current_user: dict = Depends(get_current_user)):
     if rule_type == "yara":
