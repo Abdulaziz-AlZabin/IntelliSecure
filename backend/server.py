@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -19,6 +20,7 @@ from bs4 import BeautifulSoup
 import feedparser
 import json
 import re
+import io
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -46,13 +48,13 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     company_name: str
-    company_size: str  # Small, Medium, Large, Enterprise
+    company_size: str
     num_employees: int
     industry: str
     region: str
     applied_policies: List[str]
     restrictions: List[str]
-    security_solutions: List[str]  # SIEM, EDR, IDS/IPS, Firewall
+    security_solutions: List[str]
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -77,7 +79,7 @@ class CompanyProfile(BaseModel):
     applied_policies: List[str]
     restrictions: List[str]
     security_solutions: List[str]
-    tags: Dict[str, Any]  # {"industry": str, "region": str, "sec_solutions": List[str]}
+    tags: Dict[str, Any]
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class AttackProfile(BaseModel):
@@ -85,31 +87,14 @@ class AttackProfile(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: str
-    iocs: List[str]  # Indicators of Compromise
-    ttps: List[str]  # Tactics, Techniques, and Procedures
-    tags: Dict[str, Any]  # {"industries": List[str], "regions": List[str], "sec_solutions": List[str]}
+    iocs: List[str]
+    ttps: List[str]
+    mitre_tactics: List[str] = []
+    threat_actor: Optional[str] = None
+    tags: Dict[str, Any]
     source_url: str
-    severity: str  # Low, Medium, High, Critical
+    severity: str
     discovered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class YaraRule(BaseModel):
-    attack_id: str
-    rule_name: str
-    rule_content: str
-
-class SigmaRule(BaseModel):
-    attack_id: str
-    rule_name: str
-    rule_content: str
-
-class ThreatIntel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    title: str
-    summary: str
-    url: str
-    published_at: datetime
-    source: str
 
 # ==================== UTILITIES ====================
 
@@ -148,12 +133,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @api_router.post("/auth/register")
 async def register(user_data: UserRegister):
-    # Check if user exists
     existing_user = await db.users.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create user
     user = User(
         email=user_data.email,
         password_hash=hash_password(user_data.password)
@@ -162,7 +145,6 @@ async def register(user_data: UserRegister):
     user_dict['created_at'] = user_dict['created_at'].isoformat()
     await db.users.insert_one(user_dict)
     
-    # Create company profile
     profile = CompanyProfile(
         user_id=user.id,
         company_name=user_data.company_name,
@@ -183,7 +165,6 @@ async def register(user_data: UserRegister):
     profile_dict['created_at'] = profile_dict['created_at'].isoformat()
     await db.profiles.insert_one(profile_dict)
     
-    # Generate JWT token
     token = create_jwt_token(user.id, user.email)
     
     return {
@@ -225,6 +206,18 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
 
 @api_router.put("/profile")
 async def update_profile(profile_data: dict, current_user: dict = Depends(get_current_user)):
+    # Update tags if relevant fields changed
+    if any(key in profile_data for key in ['industry', 'region', 'security_solutions']):
+        profile = await db.profiles.find_one({"user_id": current_user["id"]}, {"_id": 0})
+        tags = profile.get('tags', {})
+        if 'industry' in profile_data:
+            tags['industry'] = profile_data['industry']
+        if 'region' in profile_data:
+            tags['region'] = profile_data['region']
+        if 'security_solutions' in profile_data:
+            tags['sec_solutions'] = profile_data['security_solutions']
+        profile_data['tags'] = tags
+    
     await db.profiles.update_one(
         {"user_id": current_user["id"]},
         {"$set": profile_data}
@@ -239,52 +232,146 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    # Get matched attacks for this user
     matched_attacks = await db.user_attacks.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(1000)
     
-    # Calculate stats
     total_threats = len(matched_attacks)
     critical_threats = len([a for a in matched_attacks if a.get("severity") == "Critical"])
     high_threats = len([a for a in matched_attacks if a.get("severity") == "High"])
     medium_threats = len([a for a in matched_attacks if a.get("severity") == "Medium"])
+    low_threats = len([a for a in matched_attacks if a.get("severity") == "Low"])
+    
+    # Trend data for last 7 days
+    now = datetime.now(timezone.utc)
+    trends = []
+    for i in range(6, -1, -1):
+        day = now - timedelta(days=i)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        day_end = day.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
+        count = len([a for a in matched_attacks if day_start <= a.get('discovered_at', '') <= day_end])
+        trends.append({
+            "date": day.strftime("%m/%d"),
+            "threats": count
+        })
     
     return {
         "total_threats": total_threats,
         "critical_threats": critical_threats,
         "high_threats": high_threats,
         "medium_threats": medium_threats,
+        "low_threats": low_threats,
         "industry": profile["industry"],
-        "region": profile["region"]
+        "region": profile["region"],
+        "trends": trends
     }
 
 @api_router.get("/dashboard/attacks")
-async def get_attacks(current_user: dict = Depends(get_current_user)):
-    # Get matched attacks
-    matched_attacks = await db.user_attacks.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0}
-    ).sort("discovered_at", -1).limit(20).to_list(20)
+async def get_attacks(
+    severity: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {"user_id": current_user["id"]}
+    if severity and severity != "all":
+        query["severity"] = severity.capitalize()
+    
+    matched_attacks = await db.user_attacks.find(query, {"_id": 0}).sort("discovered_at", -1).to_list(100)
+    
+    if search:
+        search_lower = search.lower()
+        matched_attacks = [a for a in matched_attacks if search_lower in a.get('name', '').lower() or search_lower in a.get('description', '').lower()]
     
     return matched_attacks
 
 @api_router.get("/dashboard/rules/{attack_id}")
 async def get_attack_rules(attack_id: str, current_user: dict = Depends(get_current_user)):
-    # Get Yara rules
     yara_rules = await db.yara_rules.find({"attack_id": attack_id}, {"_id": 0}).to_list(100)
-    
-    # Get Sigma rules
     sigma_rules = await db.sigma_rules.find({"attack_id": attack_id}, {"_id": 0}).to_list(100)
+    
+    # Get attack details for mitigation
+    attack = await db.attacks.find_one({"id": attack_id}, {"_id": 0})
+    mitigations = []
+    if attack:
+        # Generate basic mitigations based on TTPs
+        for ttp in attack.get('ttps', [])[:3]:
+            mitigations.append({
+                "title": f"Mitigation for {ttp}",
+                "description": f"Implement monitoring and detection for {ttp} activities. Review security policies and access controls."
+            })
     
     return {
         "yara_rules": yara_rules,
-        "sigma_rules": sigma_rules
+        "sigma_rules": sigma_rules,
+        "mitigations": mitigations,
+        "mitre_tactics": attack.get('mitre_tactics', []) if attack else [],
+        "threat_actor": attack.get('threat_actor') if attack else None
     }
+
+@api_router.get("/dashboard/analytics")
+async def get_analytics(current_user: dict = Depends(get_current_user)):
+    matched_attacks = await db.user_attacks.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(1000)
+    
+    # Severity distribution
+    severity_dist = {
+        "Critical": len([a for a in matched_attacks if a.get("severity") == "Critical"]),
+        "High": len([a for a in matched_attacks if a.get("severity") == "High"]),
+        "Medium": len([a for a in matched_attacks if a.get("severity") == "Medium"]),
+        "Low": len([a for a in matched_attacks if a.get("severity") == "Low"])
+    }
+    
+    # Top threat actors
+    threat_actors = {}
+    for attack in matched_attacks:
+        actor = attack.get('threat_actor', 'Unknown')
+        threat_actors[actor] = threat_actors.get(actor, 0) + 1
+    
+    top_actors = sorted(threat_actors.items(), key=lambda x: x[1], reverse=True)[:5]
+    
+    return {
+        "severity_distribution": severity_dist,
+        "top_threat_actors": [{"name": actor, "count": count} for actor, count in top_actors]
+    }
+
+@api_router.get("/dashboard/timeline")
+async def get_timeline(current_user: dict = Depends(get_current_user)):
+    matched_attacks = await db.user_attacks.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("discovered_at", -1).limit(50).to_list(50)
+    
+    timeline = []
+    for attack in matched_attacks:
+        timeline.append({
+            "id": attack.get('id'),
+            "attack_id": attack.get('attack_id'),
+            "name": attack.get('name'),
+            "severity": attack.get('severity'),
+            "timestamp": attack.get('discovered_at')
+        })
+    
+    return timeline
+
+@api_router.post("/dashboard/export-rules/{attack_id}")
+async def export_rules(attack_id: str, rule_type: str, current_user: dict = Depends(get_current_user)):
+    if rule_type == "yara":
+        rules = await db.yara_rules.find({"attack_id": attack_id}, {"_id": 0}).to_list(100)
+        content = "\n\n".join([r['rule_content'] for r in rules])
+        filename = f"yara_rules_{attack_id}.yar"
+    else:
+        rules = await db.sigma_rules.find({"attack_id": attack_id}, {"_id": 0}).to_list(100)
+        content = "\n---\n".join([r['rule_content'] for r in rules])
+        filename = f"sigma_rules_{attack_id}.yml"
+    
+    return StreamingResponse(
+        io.BytesIO(content.encode()),
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # ==================== INSIGHTS ENDPOINT ====================
 
 @api_router.get("/insights")
 async def get_insights():
-    insights = await db.threat_intel.find({}, {"_id": 0}).sort("published_at", -1).limit(15).to_list(15)
+    insights = await db.threat_intel.find({}, {"_id": 0}).sort("published_at", -1).limit(20).to_list(20)
     return insights
 
 # ==================== WEB SCRAPING & LLM ANALYSIS ====================
@@ -293,25 +380,26 @@ THREAT_SOURCES = [
     "https://www.cisa.gov/news-events/cybersecurity-advisories",
     "https://feeds.feedburner.com/TheHackersNews",
     "https://www.bleepingcomputer.com/feed/",
-    "https://www.darkreading.com/rss.xml"
+    "https://www.darkreading.com/rss.xml",
+    "https://www.securityweek.com/feed/",
+    "https://threatpost.com/feed/",
+    "https://krebsonsecurity.com/feed/",
+    "https://www.us-cert.gov/ncas/current-activity.xml",
+    "https://www.schneier.com/blog/atom.xml"
 ]
 
 async def scrape_threat_feeds():
-    """Scrape threat intelligence from multiple sources"""
     try:
         async with aiohttp.ClientSession() as session:
             for source in THREAT_SOURCES:
                 try:
-                    # Parse RSS feed
                     feed = feedparser.parse(source)
                     
-                    for entry in feed.entries[:5]:  # Limit to 5 per source
-                        # Check if already processed
+                    for entry in feed.entries[:3]:
                         existing = await db.scraped_data.find_one({"url": entry.link})
                         if existing:
                             continue
                         
-                        # Store scraped data
                         scraped_doc = {
                             "id": str(uuid.uuid4()),
                             "title": entry.title,
@@ -323,7 +411,6 @@ async def scrape_threat_feeds():
                         }
                         await db.scraped_data.insert_one(scraped_doc)
                         
-                        # Store in threat intel for insights
                         intel_doc = {
                             "id": str(uuid.uuid4()),
                             "title": entry.title,
@@ -342,46 +429,46 @@ async def scrape_threat_feeds():
         logging.error(f"Error in scrape_threat_feeds: {e}")
 
 async def analyze_with_llm():
-    """Analyze scraped data with LLM to extract attack profiles"""
     try:
-        # Get unprocessed articles
-        unprocessed = await db.scraped_data.find({"processed": False}, {"_id": 0}).limit(3).to_list(3)
+        unprocessed = await db.scraped_data.find({"processed": False}, {"_id": 0}).limit(2).to_list(2)
         
         if not unprocessed:
             return
         
-        # Initialize LLM
         llm_key = os.environ['EMERGENT_LLM_KEY']
         chat = LlmChat(
             api_key=llm_key,
             session_id="threat_analysis",
-            system_message="""You are a cybersecurity threat intelligence analyst. Analyze the given threat article and extract:
+            system_message="""You are a cybersecurity threat intelligence analyst. Analyze threat articles and extract:
 1. Attack name
-2. Brief description
-3. IOCs (Indicators of Compromise) - IPs, domains, file hashes, etc.
-4. TTPs (Tactics, Techniques, Procedures)
-5. Target industries (e.g., Finance, Healthcare, Technology, Government, Energy)
-6. Target regions (e.g., North America, Europe, Asia, Global)
-7. Affected security solutions (e.g., SIEM, EDR, IDS/IPS, Firewall)
-8. Severity (Critical, High, Medium, Low)
+2. Description
+3. IOCs (IPs, domains, hashes)
+4. TTPs (techniques)
+5. MITRE ATT&CK tactics (e.g., Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Exfiltration, Command and Control, Impact)
+6. Threat actor/group (if mentioned)
+7. Target industries (Finance, Healthcare, Technology, Government, Energy, Retail, Manufacturing, Education, or Global)
+8. Target regions (North America, Europe, Asia, Middle East, Latin America, Africa, Oceania, or Global)
+9. Affected security solutions (SIEM, EDR, IDS/IPS, Firewall, Antivirus, DLP, or All)
+10. Severity (Critical, High, Medium, Low)
 
-Return ONLY a valid JSON object with this structure:
+Return ONLY valid JSON:
 {
   "name": "attack name",
   "description": "brief description",
   "iocs": ["ioc1", "ioc2"],
   "ttps": ["ttp1", "ttp2"],
-  "industries": ["industry1", "industry2"],
-  "regions": ["region1", "region2"],
-  "sec_solutions": ["solution1", "solution2"],
+  "mitre_tactics": ["tactic1", "tactic2"],
+  "threat_actor": "actor name or null",
+  "industries": ["industry1"],
+  "regions": ["region1"],
+  "sec_solutions": ["solution1"],
   "severity": "High"
 }"""
         ).with_model("openai", "gpt-4o-mini")
         
         for article in unprocessed:
             try:
-                # Prepare prompt
-                prompt = f"""Analyze this cybersecurity threat article:
+                prompt = f"""Analyze this cybersecurity threat:
 
 Title: {article['title']}
 URL: {article['url']}
@@ -389,21 +476,20 @@ Summary: {article['summary']}
 
 Extract threat intelligence in JSON format."""
                 
-                # Get LLM response
                 message = UserMessage(text=prompt)
                 response = await chat.send_message(message)
                 
-                # Parse JSON response
                 json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
                 if json_match:
                     attack_data = json.loads(json_match.group())
                     
-                    # Create attack profile
                     attack = AttackProfile(
                         name=attack_data.get('name', article['title']),
                         description=attack_data.get('description', ''),
                         iocs=attack_data.get('iocs', []),
                         ttps=attack_data.get('ttps', []),
+                        mitre_tactics=attack_data.get('mitre_tactics', []),
+                        threat_actor=attack_data.get('threat_actor'),
                         tags={
                             "industries": attack_data.get('industries', ['Global']),
                             "regions": attack_data.get('regions', ['Global']),
@@ -417,10 +503,8 @@ Extract threat intelligence in JSON format."""
                     attack_dict['discovered_at'] = attack_dict['discovered_at'].isoformat()
                     await db.attacks.insert_one(attack_dict)
                     
-                    # Match with user profiles
                     await match_attacks_to_users(attack)
                     
-                # Mark as processed
                 await db.scraped_data.update_one(
                     {"id": article['id']},
                     {"$set": {"processed": True}}
@@ -428,7 +512,6 @@ Extract threat intelligence in JSON format."""
                 
             except Exception as e:
                 logging.error(f"Error analyzing article {article['id']}: {e}")
-                # Mark as processed to avoid infinite retry
                 await db.scraped_data.update_one(
                     {"id": article['id']},
                     {"$set": {"processed": True}}
@@ -439,32 +522,24 @@ Extract threat intelligence in JSON format."""
         logging.error(f"Error in analyze_with_llm: {e}")
 
 async def match_attacks_to_users(attack: AttackProfile):
-    """Match attack profiles to user profiles based on tags"""
     try:
-        # Get all profiles
         profiles = await db.profiles.find({}, {"_id": 0}).to_list(1000)
         
         for profile in profiles:
-            # Check if tags match
             match_score = 0
             
-            # Check industry match
             if profile['tags']['industry'] in attack.tags['industries'] or 'Global' in attack.tags['industries']:
                 match_score += 1
             
-            # Check region match
             if profile['tags']['region'] in attack.tags['regions'] or 'Global' in attack.tags['regions']:
                 match_score += 1
             
-            # Check security solutions match
             for solution in profile['tags']['sec_solutions']:
                 if solution in attack.tags['sec_solutions'] or 'All' in attack.tags['sec_solutions']:
                     match_score += 1
                     break
             
-            # If match score >= 2, link attack to user
             if match_score >= 2:
-                # Check if already linked
                 existing = await db.user_attacks.find_one({
                     "user_id": profile['user_id'],
                     "attack_id": attack.id
@@ -479,27 +554,26 @@ async def match_attacks_to_users(attack: AttackProfile):
                         "description": attack.description,
                         "severity": attack.severity,
                         "source_url": attack.source_url,
+                        "threat_actor": attack.threat_actor,
                         "discovered_at": attack.discovered_at.isoformat(),
                         "linked_at": datetime.now(timezone.utc).isoformat()
                     }
                     await db.user_attacks.insert_one(user_attack)
-                    
-                    # Generate rules for this user's security solutions
                     await generate_rules(attack, profile['tags']['sec_solutions'])
                     
     except Exception as e:
         logging.error(f"Error in match_attacks_to_users: {e}")
 
 async def generate_rules(attack: AttackProfile, sec_solutions: List[str]):
-    """Generate Yara and Sigma rules for the attack"""
     try:
-        # Generate Yara rule
         yara_rule_content = f"""rule {attack.name.replace(' ', '_')}_Detection
 {{
     meta:
         description = "{attack.description}"
         severity = "{attack.severity}"
+        threat_actor = "{attack.threat_actor or 'Unknown'}"
         source = "{attack.source_url}"
+        mitre_tactics = "{', '.join(attack.mitre_tactics)}"
     
     strings:
         $ioc1 = "{attack.iocs[0] if attack.iocs else 'malicious_indicator'}"
@@ -517,13 +591,16 @@ async def generate_rules(attack: AttackProfile, sec_solutions: List[str]):
         }
         await db.yara_rules.insert_one(yara_rule)
         
-        # Generate Sigma rule
         sigma_rule_content = f"""title: {attack.name} Detection
 id: {str(uuid.uuid4())}
 status: experimental
 description: Detects {attack.description}
 author: Intellisecure AI
 date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+references:
+    - {attack.source_url}
+tags:
+    - attack.{attack.mitre_tactics[0].lower().replace(' ', '_') if attack.mitre_tactics else 'unknown'}
 logsource:
     category: process_creation
     product: windows
@@ -534,7 +611,7 @@ detection:
             - '{attack.ttps[0] if attack.ttps else 'suspicious'}'
     condition: selection
 falsepositives:
-    - Unknown
+    - Legitimate administrative activity
 level: {attack.severity.lower()}"""
         
         sigma_rule = {
@@ -548,22 +625,19 @@ level: {attack.severity.lower()}"""
     except Exception as e:
         logging.error(f"Error generating rules: {e}")
 
-# Background task runner
 async def run_background_tasks():
-    """Run scraping and analysis tasks periodically"""
     while True:
         try:
             await scrape_threat_feeds()
-            await asyncio.sleep(10)  # Wait between scraping and analysis
+            await asyncio.sleep(10)
             await analyze_with_llm()
-            await asyncio.sleep(300)  # Run every 5 minutes
+            await asyncio.sleep(300)
         except Exception as e:
             logging.error(f"Error in background tasks: {e}")
             await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():
-    # Start background tasks
     asyncio.create_task(run_background_tasks())
 
 # ==================== ROOT & HEALTH CHECK ====================
@@ -576,7 +650,6 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-# Include router
 app.include_router(api_router)
 
 app.add_middleware(
