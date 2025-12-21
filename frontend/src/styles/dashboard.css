@@ -13,6 +13,146 @@
   color: #667eea;
 }
 
+/* Trend Chart */
+.trend-chart-card {
+  background: rgba(26, 26, 46, 0.6);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.chart-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 1.5rem;
+}
+
+/* Threats Controls */
+.threats-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  flex: 1;
+  min-width: 250px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15, 15, 26, 0.8);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+}
+
+.search-box svg {
+  color: #667eea;
+}
+
+.filter-select {
+  min-width: 180px;
+}
+
+/* Analytics */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 2rem;
+}
+
+.analytics-card {
+  background: rgba(26, 26, 46, 0.6);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+}
+
+/* Timeline */
+.timeline-container {
+  width: 100%;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: relative;
+  padding-left: 2rem;
+}
+
+.timeline-list::before {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #667eea, transparent);
+}
+
+.timeline-item {
+  position: relative;
+  display: flex;
+  gap: 1.5rem;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: -1.5rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #667eea;
+  background: #0a0a0f;
+}
+
+.timeline-marker.severity-critical {
+  border-color: #ff6b6b;
+  background: #ff6b6b;
+}
+
+.timeline-marker.severity-high {
+  border-color: #f5576c;
+  background: #f5576c;
+}
+
+.timeline-marker.severity-medium {
+  border-color: #4facfe;
+  background: #4facfe;
+}
+
+.timeline-content {
+  flex: 1;
+  background: rgba(15, 15, 26, 0.8);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-header h4 {
+  font-size: 1rem;
+  color: #fff;
+}
+
+.timeline-date {
+  font-size: 0.875rem;
+  color: #718096;
+}
+
 /* Header */
 .dashboard-header {
   background: rgba(26, 26, 46, 0.8);
