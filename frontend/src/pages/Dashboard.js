@@ -247,6 +247,10 @@ const Dashboard = () => {
               <AlertTriangle className="w-4 h-4 mr-2" />
               Active Threats
             </TabsTrigger>
+            <TabsTrigger value="map" data-testid="map-tab">
+              <Globe className="w-4 h-4 mr-2" />
+              Geographic Map
+            </TabsTrigger>
             <TabsTrigger value="analytics" data-testid="analytics-tab">
               <BarChart3 className="w-4 h-4 mr-2" />
               Analytics
