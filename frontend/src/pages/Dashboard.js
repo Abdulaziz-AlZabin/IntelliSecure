@@ -338,6 +338,16 @@ const Dashboard = () => {
             </div>
           </TabsContent>
           
+          <TabsContent value="map" className="tab-content map-tab-content">
+            <div className="map-section">
+              <div className="map-header">
+                <h3>Global Threat Distribution</h3>
+                <p>Interactive map showing geographic locations of detected threats</p>
+              </div>
+              <ThreatMap geoData={geoData} />
+            </div>
+          </TabsContent>
+          
           <TabsContent value="analytics" className="tab-content">
             <div className="analytics-grid">
               <div className="analytics-card">
