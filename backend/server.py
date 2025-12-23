@@ -439,6 +439,168 @@ async def get_insights():
     insights = await db.threat_intel.find({}, {"_id": 0}).sort("published_at", -1).limit(20).to_list(20)
     return insights
 
+# ==================== ADMIN ENDPOINTS ====================
+
+@api_router.post("/admin/login")
+async def admin_login(credentials: UserLogin):
+    if credentials.email == ADMIN_USERNAME and credentials.password == ADMIN_PASSWORD:
+        token = create_jwt_token("admin", "admin")
+        return {
+            "message": "Admin login successful",
+            "token": token,
+            "user": {"id": "admin", "email": "admin", "role": "admin"}
+        }
+    raise HTTPException(status_code=401, detail="Invalid admin credentials")
+
+async def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = verify_jwt_token(token)
+    if payload.get("user_id") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return payload
+
+@api_router.get("/admin/companies")
+async def get_all_companies(admin: dict = Depends(verify_admin)):
+    profiles = await db.profiles.find({}, {"_id": 0}).to_list(1000)
+    
+    # Enrich with user data
+    for profile in profiles:
+        user = await db.users.find_one({"id": profile["user_id"]}, {"_id": 0, "password_hash": 0})
+        if user:
+            profile["user_email"] = user.get("email")
+            profile["created_at"] = user.get("created_at")
+    
+    return profiles
+
+@api_router.get("/admin/resources")
+async def get_resources(admin: dict = Depends(verify_admin)):
+    return {"sources": THREAT_SOURCES}
+
+@api_router.post("/admin/resources")
+async def add_resource(resource_url: dict, admin: dict = Depends(verify_admin)):
+    url = resource_url.get("url")
+    if url and url not in THREAT_SOURCES:
+        THREAT_SOURCES.append(url)
+        return {"message": "Resource added successfully", "sources": THREAT_SOURCES}
+    raise HTTPException(status_code=400, detail="Invalid or duplicate URL")
+
+@api_router.delete("/admin/resources")
+async def delete_resource(resource_url: dict, admin: dict = Depends(verify_admin)):
+    url = resource_url.get("url")
+    if url in THREAT_SOURCES:
+        THREAT_SOURCES.remove(url)
+        return {"message": "Resource removed successfully", "sources": THREAT_SOURCES}
+    raise HTTPException(status_code=400, detail="URL not found")
+
+@api_router.get("/admin/attacks")
+async def get_all_attacks(admin: dict = Depends(verify_admin)):
+    attacks = await db.attacks.find({}, {"_id": 0}).sort("discovered_at", -1).limit(100).to_list(100)
+    return attacks
+
+@api_router.put("/admin/attack/{attack_id}/rules")
+async def update_attack_rules(attack_id: str, rules_data: dict, admin: dict = Depends(verify_admin)):
+    # Update Yara rules with IOCs
+    yara_iocs = rules_data.get("yara_iocs", [])
+    attack = await db.attacks.find_one({"id": attack_id}, {"_id": 0})
+    
+    if not attack:
+        raise HTTPException(status_code=404, detail="Attack not found")
+    
+    # Generate enhanced Yara rule with provided IOCs
+    yara_rule_content = f"""rule {attack['name'].replace(' ', '_')}_Detection
+{{
+    meta:
+        description = "{attack['description']}"
+        severity = "{attack['severity']}"
+        threat_actor = "{attack.get('threat_actor', 'Unknown')}"
+        source = "{attack['source_url']}"
+        mitre_tactics = "{', '.join(attack.get('mitre_tactics', []))}"
+        author = "Intellisecure Admin"
+        date = "{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+    
+    strings:"""
+    
+    for i, ioc in enumerate(yara_iocs[:10], 1):
+        if ioc.get('type') == 'hash':
+            yara_rule_content += f'\n        $hash{i} = "{ioc["value"]}"'
+        elif ioc.get('type') == 'ip':
+            yara_rule_content += f'\n        $ip{i} = "{ioc["value"]}"'
+        elif ioc.get('type') == 'domain':
+            yara_rule_content += f'\n        $domain{i} = "{ioc["value"]}"'
+        elif ioc.get('type') == 'string':
+            yara_rule_content += f'\n        $str{i} = "{ioc["value"]}" wide ascii'
+        elif ioc.get('type') == 'filename':
+            yara_rule_content += f'\n        $file{i} = "{ioc["value"]}" nocase'
+    
+    yara_rule_content += """
+    
+    condition:
+        any of them
+}}"""
+    
+    # Update Yara rule in database
+    await db.yara_rules.update_many(
+        {"attack_id": attack_id},
+        {"$set": {"rule_content": yara_rule_content, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Generate enhanced Sigma rule
+    sigma_ttps = rules_data.get("sigma_ttps", attack.get('ttps', []))
+    sigma_rule_content = f"""title: {attack['name']} Detection
+id: {str(uuid.uuid4())}
+status: stable
+description: |
+    {attack['description']}
+    Enhanced rule with specific TTPs and detection patterns.
+author: Intellisecure Admin
+date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+modified: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+references:
+    - {attack['source_url']}
+tags:"""
+    
+    for tactic in attack.get('mitre_tactics', []):
+        sigma_rule_content += f"\n    - attack.{tactic.lower().replace(' ', '_')}"
+    
+    sigma_rule_content += f"""
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_process:"""
+    
+    for i, ttp in enumerate(sigma_ttps[:5], 1):
+        sigma_rule_content += f"\n        - CommandLine|contains: '{ttp}'"
+    
+    sigma_rule_content += """
+    selection_network:"""
+    
+    for ioc in yara_iocs:
+        if ioc.get('type') in ['ip', 'domain']:
+            sigma_rule_content += f"\n        - DestinationHostname|contains: '{ioc['value']}'"
+    
+    sigma_rule_content += """
+    condition: selection_process or selection_network
+falsepositives:
+    - Legitimate administrative activity
+    - Security software updates
+level: """
+    
+    severity_map = {"Critical": "critical", "High": "high", "Medium": "medium", "Low": "low"}
+    sigma_rule_content += severity_map.get(attack['severity'], 'medium')
+    
+    # Update Sigma rule in database
+    await db.sigma_rules.update_many(
+        {"attack_id": attack_id},
+        {"$set": {"rule_content": sigma_rule_content, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {
+        "message": "Rules updated successfully",
+        "yara_rule": yara_rule_content,
+        "sigma_rule": sigma_rule_content
+    }
+
 # ==================== WEB SCRAPING & LLM ANALYSIS ====================
 
 THREAT_SOURCES = [
