@@ -14,7 +14,7 @@ const Welcome = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Threat locations for globe
+  // Threat locations for demo
   const threatLocations = [
     { lat: 40.7128, lng: -74.0060, size: 0.8, color: '#ff6b6b', name: 'North America' },
     { lat: 51.5074, lng: -0.1278, size: 0.6, color: '#f5576c', name: 'Europe' },
