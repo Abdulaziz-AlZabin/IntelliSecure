@@ -35,6 +35,10 @@ JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = os.environ['JWT_ALGORITHM']
 JWT_EXPIRATION_HOURS = int(os.environ['JWT_EXPIRATION_HOURS'])
 
+# Admin credentials
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Aarrafj7##7jfarraA')
+
 # Security
 security = HTTPBearer()
 
