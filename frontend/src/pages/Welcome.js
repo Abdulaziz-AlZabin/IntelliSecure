@@ -175,18 +175,38 @@ const Welcome = () => {
             <div className="globe-wrapper">
               <Globe
                 ref={globeEl}
-                globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
-                bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-                backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+                globeImageUrl=""
+                showGlobe={true}
+                showAtmosphere={true}
+                backgroundColor="rgba(0,0,0,0)"
                 pointsData={threatLocations}
-                pointAltitude={0.01}
+                pointAltitude={0.02}
                 pointRadius={d => d.size}
                 pointColor={d => d.color}
-                pointLabel={d => `<div style="color: white; background: rgba(0,0,0,0.8); padding: 8px; border-radius: 4px;">${d.name}</div>`}
+                pointLabel={d => `<div style="color: white; background: rgba(0,0,0,0.8); padding: 8px; border-radius: 4px; font-family: sans-serif;">${d.name}</div>`}
                 atmosphereColor="#667eea"
-                atmosphereAltitude={0.2}
+                atmosphereAltitude={0.25}
+                hexPolygonsData={[]}
+                hexPolygonResolution={3}
+                hexPolygonMargin={0.3}
+                hexPolygonColor={() => 'rgba(102, 126, 234, 0.1)'}
+                showGraticules={true}
+                graticulesColor="#667eea"
+                graticulesOpacity={0.3}
                 height={600}
                 width={600}
+                onGlobeReady={() => {
+                  if (globeEl.current) {
+                    // Set custom material for wireframe effect
+                    const globe = globeEl.current.scene().children.find(obj => obj.type === 'Mesh');
+                    if (globe) {
+                      globe.material.wireframe = true;
+                      globe.material.color.setHex(0x667eea);
+                      globe.material.transparent = true;
+                      globe.material.opacity = 0.15;
+                    }
+                  }
+                }}
               />
             </div>
             <div className="globe-label">Live Threat Distribution</div>
