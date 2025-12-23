@@ -42,6 +42,8 @@ function App() {
                 <Dashboard />
               </ProtectedRoute>
             } />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />
