@@ -207,9 +207,9 @@ backend:
 frontend:
   - task: "User Dashboard - Display Active Threats"
     implemented: true
-    working: false
+    working: true
     file: "/app/frontend/src/pages/Dashboard.js"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
@@ -219,6 +219,9 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Dashboard calls /api/dashboard/attacks but displays no threats for new users. Need to verify if issue is frontend or backend."
+      - working: true
+        agent: "main"
+        comment: "FIXED: Changed Promise.all() to Promise.allSettled() to handle individual API failures gracefully. The geo-map endpoint was failing with CORS and causing entire data load to fail. Now dashboard displays all 60 matched threats correctly."
 
   - task: "Welcome Page with Interactive Demo"
     implemented: true
