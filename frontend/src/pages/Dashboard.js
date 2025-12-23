@@ -118,6 +118,28 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  const handleDownloadWeeklyReport = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get(`${API}/dashboard/weekly-report`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `intellisecure_weekly_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Weekly report downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download report');
+    }
+  };
+
   const filteredAttacks = attacks.filter(attack => 
     searchTerm ? (
       attack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
