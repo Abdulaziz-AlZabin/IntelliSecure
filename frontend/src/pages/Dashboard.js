@@ -176,6 +176,15 @@ const Dashboard = () => {
             <Button 
               variant="ghost" 
               size="sm"
+              onClick={handleDownloadWeeklyReport}
+              data-testid="download-report-btn"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Weekly Report
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
               onClick={() => setShowProfile(true)}
               data-testid="profile-btn"
             >
