@@ -1109,6 +1109,7 @@ async def generate_rules(attack: AttackProfile, sec_solutions: List[str]):
         }
         await db.yara_rules.insert_one(yara_rule)
         
+        mitre_tag = attack.mitre_tactics[0].lower().replace(' ', '_') if attack.mitre_tactics and len(attack.mitre_tactics) > 0 else 'unknown'
         sigma_rule_content = f"""title: {attack.name} Detection
 id: {str(uuid.uuid4())}
 status: experimental
@@ -1118,7 +1119,7 @@ date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
 references:
     - {attack.source_url}
 tags:
-    - attack.{attack.mitre_tactics[0].lower().replace(' ', '_') if attack.mitre_tactics else 'unknown'}
+    - attack.{mitre_tag}
 logsource:
     category: process_creation
     product: windows
