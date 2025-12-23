@@ -124,9 +124,40 @@
   height: 600px;
   position: relative;
   border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 0 100px rgba(102, 126, 234, 0.4);
+  overflow: visible;
+  background: radial-gradient(circle, rgba(102, 126, 234, 0.05) 0%, transparent 70%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.globe-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(102, 126, 234, 0.3), transparent 60%);
+  pointer-events: none;
   animation: pulse-glow 4s ease-in-out infinite;
+}
+
+.globe-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  pointer-events: none;
+  animation: orbit 20s linear infinite;
+}
+
+@keyframes orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .globe-label {
@@ -139,6 +170,7 @@
   background: rgba(102, 126, 234, 0.1);
   border: 1px solid rgba(102, 126, 234, 0.3);
   border-radius: 100px;
+  backdrop-filter: blur(10px);
 }
 
 /* Features Showcase */
