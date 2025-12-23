@@ -427,20 +427,22 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <div className="insights-list">
-                  {insights.map((insight) => (
-                    <div key={insight.id} className="insight-card" data-testid={`insight-card-${insight.id}`}>
+                  {insights.map((insight) => (\n                    <div key={insight.id} className="insight-card" data-testid={`insight-card-${insight.id}`}>
                       <h3>{insight.title}</h3>
                       <p>{insight.summary}</p>
                       <div className="insight-footer">
-                        <span className="insight-source">{insight.source}</span>
+                        <span className="insight-source\">{insight.source}</span>
                         <a 
                           href={insight.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="insight-link"
-                          data-testid={`insight-link-${insight.id}`}
+                          target=\"_blank\" 
+                          rel=\"noopener noreferrer\"
+                          className=\"insight-link-btn\"
+                          data-testid={`read-article-btn-${insight.id}`}
                         >
-                          Read more <ExternalLink className="w-4 h-4" />
+                          <Button size=\"sm\" variant=\"outline\">
+                            Read Article
+                            <ExternalLink className=\"w-4 h-4 ml-2\" />
+                          </Button>
                         </a>
                       </div>
                     </div>
