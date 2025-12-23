@@ -150,7 +150,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 # ==================== AUTH ENDPOINTS ====================
 
 @api_router.post("/auth/register")
-async def register(user_data: UserRegister):
+async def register(user_data: UserRegister, background_tasks: BackgroundTasks):
     existing_user = await db.users.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -182,6 +182,9 @@ async def register(user_data: UserRegister):
     profile_dict = profile.model_dump()
     profile_dict['created_at'] = profile_dict['created_at'].isoformat()
     await db.profiles.insert_one(profile_dict)
+    
+    # Match existing attacks to new user immediately
+    background_tasks.add_task(match_user_to_existing_attacks, profile)
     
     token = create_jwt_token(user.id, user.email)
     
