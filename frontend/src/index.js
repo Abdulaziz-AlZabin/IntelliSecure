@@ -8,6 +8,7 @@ import './styles/interactive-demo.css';
 import './styles/auth.css';
 import './styles/dashboard.css';
 import './styles/map.css';
+import './styles/admin.css';
 import App from './App';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
