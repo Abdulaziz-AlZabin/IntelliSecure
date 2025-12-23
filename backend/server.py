@@ -450,7 +450,13 @@ THREAT_SOURCES = [
     "https://threatpost.com/feed/",
     "https://krebsonsecurity.com/feed/",
     "https://www.us-cert.gov/ncas/current-activity.xml",
-    "https://www.schneier.com/blog/atom.xml"
+    "https://www.schneier.com/blog/atom.xml",
+    "https://www.sans.org/reading-room/whitepapers/rss",
+    "https://www.csoonline.com/feed/",
+    "https://www.infosecurity-magazine.com/rss/news/",
+    "https://nakedsecurity.sophos.com/feed/",
+    "https://grahamcluley.com/feed/",
+    "https://www.cyberscoop.com/feed/"
 ]
 
 async def scrape_threat_feeds():
