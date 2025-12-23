@@ -60,6 +60,7 @@ const Dashboard = () => {
       setAnalytics(analyticsRes.data);
       setTimeline(timelineRes.data);
       setGeoData(geoRes.data);
+      console.log('Insights loaded:', insightsRes.data.length, 'items');
     } catch (error) {
       console.error('Error loading dashboard:', error);
       if (error.response?.status === 401) {
