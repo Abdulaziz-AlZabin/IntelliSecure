@@ -45,7 +45,7 @@ const Dashboard = () => {
     if (!token) return;
 
     try {
-      const [statsRes, attacksRes, insightsRes, analyticsRes, timelineRes, geoRes] = await Promise.all([
+      const results = await Promise.allSettled([
         axios.get(`${API}/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/dashboard/attacks?severity=${severityFilter}`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/insights`),
@@ -54,13 +54,40 @@ const Dashboard = () => {
         axios.get(`${API}/dashboard/geo-map`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
-      setStats(statsRes.data);
-      setAttacks(attacksRes.data);
-      setInsights(insightsRes.data);
-      setAnalytics(analyticsRes.data);
-      setTimeline(timelineRes.data);
-      setGeoData(geoRes.data);
-      console.log('Insights loaded:', insightsRes.data.length, 'items');
+      // Handle stats
+      if (results[0].status === 'fulfilled') {
+        setStats(results[0].value.data);
+      }
+      
+      // Handle attacks - critical data
+      if (results[1].status === 'fulfilled') {
+        setAttacks(results[1].value.data);
+        console.log('Attacks loaded:', results[1].value.data.length, 'threats');
+      }
+      
+      // Handle insights
+      if (results[2].status === 'fulfilled') {
+        setInsights(results[2].value.data);
+        console.log('Insights loaded:', results[2].value.data.length, 'items');
+      }
+      
+      // Handle analytics
+      if (results[3].status === 'fulfilled') {
+        setAnalytics(results[3].value.data);
+      }
+      
+      // Handle timeline
+      if (results[4].status === 'fulfilled') {
+        setTimeline(results[4].value.data);
+      }
+      
+      // Handle geo-map
+      if (results[5].status === 'fulfilled') {
+        setGeoData(results[5].value.data);
+      } else {
+        console.warn('Geo-map data not available');
+      }
+      
     } catch (error) {
       console.error('Error loading dashboard:', error);
       if (error.response?.status === 401) {
