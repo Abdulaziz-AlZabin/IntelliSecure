@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Shield, Brain, Target, Lock, TrendingUp, Globe as GlobeIcon, Zap, Eye, Database, FileCode, Bell, Activity, BarChart3, Map, ArrowRight, CheckCircle, Sparkles } from 'lucide-react';
-import Globe from 'react-globe.gl';
+import NettedGlobe from '@/components/NettedGlobe';
 
 const Welcome = () => {
   const navigate = useNavigate();
