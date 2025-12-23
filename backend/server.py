@@ -628,10 +628,15 @@ async def scrape_threat_feeds():
                 try:
                     feed = feedparser.parse(source)
                     
-                    for entry in feed.entries[:3]:
+                    for entry in feed.entries[:5]:
                         existing = await db.scraped_data.find_one({"url": entry.link})
                         if existing:
                             continue
+                        
+                        # Get published date
+                        published_date = datetime.now(timezone.utc)
+                        if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                            published_date = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                         
                         scraped_doc = {
                             "id": str(uuid.uuid4()),
@@ -639,7 +644,7 @@ async def scrape_threat_feeds():
                             "url": entry.link,
                             "summary": entry.get('summary', '')[:500],
                             "source": source,
-                            "published_at": datetime.now(timezone.utc).isoformat(),
+                            "published_at": published_date.isoformat(),
                             "processed": False
                         }
                         await db.scraped_data.insert_one(scraped_doc)
@@ -649,7 +654,7 @@ async def scrape_threat_feeds():
                             "title": entry.title,
                             "summary": entry.get('summary', '')[:300],
                             "url": entry.link,
-                            "published_at": datetime.now(timezone.utc).isoformat(),
+                            "published_at": published_date.isoformat(),
                             "source": source
                         }
                         await db.threat_intel.insert_one(intel_doc)
