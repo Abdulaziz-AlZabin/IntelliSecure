@@ -963,6 +963,122 @@ async def match_attacks_to_users(attack: AttackProfile):
     except Exception as e:
         logging.error(f"Error in match_attacks_to_users: {e}")
 
+async def match_user_to_existing_attacks(profile: CompanyProfile):
+    """Match a new user profile to existing attacks in the database"""
+    try:
+        attacks = await db.attacks.find({}, {"_id": 0}).to_list(1000)
+        
+        for attack in attacks:
+            match_score = 0
+            
+            # Check industry match
+            if profile.tags['industry'] in attack['tags']['industries'] or 'Global' in attack['tags']['industries']:
+                match_score += 1
+            
+            # Check region match
+            if profile.tags['region'] in attack['tags']['regions'] or 'Global' in attack['tags']['regions']:
+                match_score += 1
+            
+            # Check security solutions match
+            for solution in profile.tags['sec_solutions']:
+                if solution in attack['tags']['sec_solutions'] or 'All' in attack['tags']['sec_solutions']:
+                    match_score += 1
+                    break
+            
+            # If match score is 2 or higher, link the attack to the user
+            if match_score >= 2:
+                existing = await db.user_attacks.find_one({
+                    "user_id": profile.user_id,
+                    "attack_id": attack['id']
+                })
+                
+                if not existing:
+                    user_attack = {
+                        "id": str(uuid.uuid4()),
+                        "user_id": profile.user_id,
+                        "attack_id": attack['id'],
+                        "name": attack['name'],
+                        "description": attack['description'],
+                        "severity": attack['severity'],
+                        "source_url": attack['source_url'],
+                        "threat_actor": attack.get('threat_actor'),
+                        "discovered_at": attack['discovered_at'],
+                        "linked_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.user_attacks.insert_one(user_attack)
+                    await generate_rules_for_attack(attack, profile.tags['sec_solutions'])
+                    
+    except Exception as e:
+        logging.error(f"Error in match_user_to_existing_attacks: {e}")
+
+async def generate_rules_for_attack(attack: dict, sec_solutions: List[str]):
+    """Generate rules for a specific attack and user"""
+    try:
+        # Check if rules already exist for this attack
+        existing_yara = await db.yara_rules.find_one({"attack_id": attack['id']})
+        existing_sigma = await db.sigma_rules.find_one({"attack_id": attack['id']})
+        
+        if not existing_yara:
+            yara_rule_content = f"""rule {attack['name'].replace(' ', '_')}_Detection
+{{
+    meta:
+        description = "{attack['description']}"
+        severity = "{attack['severity']}"
+        threat_actor = "{attack.get('threat_actor', 'Unknown')}"
+        source = "{attack['source_url']}"
+        mitre_tactics = "{', '.join(attack.get('mitre_tactics', []))}"
+    
+    strings:
+        $ioc1 = "{attack['iocs'][0] if attack.get('iocs') else 'malicious_indicator'}"
+        $ttp1 = "{attack['ttps'][0] if attack.get('ttps') else 'suspicious_behavior'}"
+    
+    condition:
+        any of them
+}}"""
+            
+            yara_rule = {
+                "id": str(uuid.uuid4()),
+                "attack_id": attack['id'],
+                "rule_name": f"{attack['name'].replace(' ', '_')}_Yara",
+                "rule_content": yara_rule_content
+            }
+            await db.yara_rules.insert_one(yara_rule)
+        
+        if not existing_sigma:
+            sigma_rule_content = f"""title: {attack['name']} Detection
+id: {str(uuid.uuid4())}
+status: experimental
+description: Detects {attack['description']}
+author: Intellisecure AI
+date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+references:
+    - {attack['source_url']}
+tags:
+    - attack.{attack.get('mitre_tactics', ['unknown'])[0].lower().replace(' ', '_')}
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|contains:
+            - '{attack.get('iocs', ['malicious'])[0]}'
+            - '{attack.get('ttps', ['suspicious'])[0]}'
+    condition: selection
+falsepositives:
+    - Legitimate administrative activity
+level: {attack['severity'].lower()}"""
+            
+            sigma_rule = {
+                "id": str(uuid.uuid4()),
+                "attack_id": attack['id'],
+                "rule_name": f"{attack['name'].replace(' ', '_')}_Sigma",
+                "rule_content": sigma_rule_content
+            }
+            await db.sigma_rules.insert_one(sigma_rule)
+            
+    except Exception as e:
+        logging.error(f"Error generating rules for attack: {e}")
+
 async def generate_rules(attack: AttackProfile, sec_solutions: List[str]):
     try:
         yara_rule_content = f"""rule {attack.name.replace(' ', '_')}_Detection
