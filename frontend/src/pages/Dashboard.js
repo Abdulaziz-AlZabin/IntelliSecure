@@ -458,27 +458,32 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <div className="insights-list">
-                  {insights.map((insight) => (
-                    <div key={insight.id} className="insight-card" data-testid={`insight-card-${insight.id}`}>
-                      <h3>{insight.title}</h3>
-                      <p>{insight.summary}</p>
-                      <div className="insight-footer">
-                        <span className="insight-source">{insight.source}</span>
-                        <a 
-                          href={insight.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="insight-link-btn"
-                          data-testid={`read-article-btn-${insight.id}`}
-                        >
-                          <Button size="sm" variant="outline">
-                            Read Article
-                            <ExternalLink className="w-4 h-4 ml-2" />
-                          </Button>
-                        </a>
+                  {insights.map((insight) => {
+                    const cleanSummary = insight.summary?.replace(/<[^>]*>/g, '').substring(0, 200) || 'No description available';
+                    const cleanSource = insight.source?.split('/')[2] || insight.source;
+                    
+                    return (
+                      <div key={insight.id} className="insight-card" data-testid={`insight-card-${insight.id}`}>
+                        <h3>{insight.title}</h3>
+                        <p>{cleanSummary}...</p>
+                        <div className="insight-footer">
+                          <span className="insight-source">{cleanSource}</span>
+                          <a 
+                            href={insight.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="insight-link-btn"
+                            data-testid={`read-article-btn-${insight.id}`}
+                          >
+                            <Button size="sm" variant="outline">
+                              Read Article
+                              <ExternalLink className="w-4 h-4 ml-2" />
+                            </Button>
+                          </a>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
