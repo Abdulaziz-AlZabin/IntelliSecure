@@ -7,37 +7,11 @@ import NettedGlobe from '@/components/NettedGlobe';
 const Welcome = () => {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
-  const globeEl = useRef();
-  const [globeReady, setGlobeReady] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    if (globeEl.current) {
-      globeEl.current.controls().autoRotate = true;
-      globeEl.current.controls().autoRotateSpeed = 0.5;
-      globeEl.current.controls().enableZoom = false;
-      
-      // Access the globe mesh and apply wireframe
-      setTimeout(() => {
-        const scene = globeEl.current.scene();
-        scene.traverse((obj) => {
-          if (obj.type === 'Mesh' && obj.geometry.type === 'SphereGeometry') {
-            obj.material.wireframe = true;
-            obj.material.wireframeLinewidth = 2;
-            obj.material.color.setHex(0x667eea);
-            obj.material.transparent = true;
-            obj.material.opacity = 0.2;
-          }
-        });
-      }, 100);
-      
-      setGlobeReady(true);
-    }
   }, []);
 
   // Threat locations for globe
