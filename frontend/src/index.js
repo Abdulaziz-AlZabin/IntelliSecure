@@ -4,6 +4,7 @@ import './index.css';
 import './styles/welcome.css';
 import './styles/welcome-enhanced.css';
 import './styles/welcome-interactive.css';
+import './styles/interactive-demo.css';
 import './styles/auth.css';
 import './styles/dashboard.css';
 import './styles/map.css';
