@@ -446,8 +446,8 @@ async def get_insights():
 # ==================== ADMIN ENDPOINTS ====================
 
 @api_router.post("/admin/login")
-async def admin_login(credentials: UserLogin):
-    if credentials.email == ADMIN_USERNAME and credentials.password == ADMIN_PASSWORD:
+async def admin_login(credentials: AdminLoginModel):
+    if credentials.username == ADMIN_USERNAME and credentials.password == ADMIN_PASSWORD:
         token = create_jwt_token("admin", "admin")
         return {
             "message": "Admin login successful",
