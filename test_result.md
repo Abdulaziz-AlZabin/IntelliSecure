@@ -101,3 +101,155 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Intellisecure threat intelligence platform - users register with company profiles, system scrapes cybersecurity threats, analyzes with LLM, matches to user profiles, displays on dashboard with Yara/Sigma rules and insights"
+
+backend:
+  - task: "User Registration with Company Profile"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py - line 152-195"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Registration endpoint includes background task to match existing attacks. Need to verify this works for new users."
+
+  - task: "Background Threat Scraping and Analysis"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py - line 1146-1159"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Background tasks running on startup to scrape threats and analyze with LLM. Need to verify threats are being populated in DB."
+
+  - task: "Threat Matching to User Profiles"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py - line 926-1015"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "User reported: No active threats are displayed on dashboard. This is the critical issue."
+      - working: "NA"
+        agent: "main"
+        comment: "Two matching functions exist: match_attacks_to_users (called when new attack is created) and match_user_to_existing_attacks (called when new user registers). Need to test if these are working correctly."
+
+  - task: "Dashboard Attacks API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py - line 256"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "API endpoint /api/dashboard/attacks retrieves matched threats from user_attacks collection. Previous agent verified API returns data for existing test user. Need to test with new user."
+
+  - task: "Admin Panel Authentication"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py - line 224-240"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Admin login fixed and working. Credentials: admin / Aarrafj7##7jfarraA"
+
+  - task: "Weekly PDF Report Generation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py - line 361-430"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "PDF report download feature completed and working"
+
+  - task: "Insights Feed"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py - line 432-455"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Insights display fixed and working"
+
+frontend:
+  - task: "User Dashboard - Display Active Threats"
+    implemented: true
+    working: false
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "User reported: No active threats displayed on dashboard. This is the main visible issue."
+      - working: "NA"
+        agent: "main"
+        comment: "Dashboard calls /api/dashboard/attacks but displays no threats for new users. Need to verify if issue is frontend or backend."
+
+  - task: "Welcome Page with Interactive Demo"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Welcome.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Interactive threat demo simulator implemented and working"
+
+  - task: "Admin Dashboard"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/AdminDashboard.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Admin panel working with company/resource management"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Threat Matching to User Profiles"
+    - "Background Threat Scraping and Analysis"
+    - "Dashboard Attacks API"
+    - "User Dashboard - Display Active Threats"
+  stuck_tasks:
+    - "Threat Matching to User Profiles"
+    - "User Dashboard - Display Active Threats"
+  test_all: false
+  test_priority: "stuck_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Backend service restarted successfully. Background tasks are now running on startup. The critical issue is that new users don't see any threats on their dashboard. I need comprehensive testing to identify if the problem is: 1) Threats not being scraped/analyzed, 2) Matching logic not working correctly, 3) Database not being populated, or 4) Frontend not displaying the data correctly. Please test the complete flow: register new user -> wait for background tasks -> check if threats appear on dashboard. Also verify the threat scraping and LLM analysis is working."
