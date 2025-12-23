@@ -1,244 +1,253 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Shield, Lock, Brain, AlertTriangle, Eye, Target, TrendingUp, Globe, Zap, Award, CheckCircle, ArrowRight, Users, Building2, Server, Database } from 'lucide-react';
+import { Shield, Brain, Target, Lock, TrendingUp, Globe as GlobeIcon, Zap, Eye, Database, FileCode, Bell, Activity, BarChart3, Map, ArrowRight, CheckCircle, Sparkles } from 'lucide-react';
+import Globe from 'react-globe.gl';
 
 const Welcome = () => {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
-  const [activeFeature, setActiveFeature] = useState(0);
-  const [statsVisible, setStatsVisible] = useState(false);
+  const globeEl = useRef();
+  const [globeReady, setGlobeReady] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrollY(window.scrollY);
-      if (window.scrollY > 300 && !statsVisible) {
-        setStatsVisible(true);
-      }
-    };
+    const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [statsVisible]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % 6);
-    }, 3000);
-    return () => clearInterval(interval);
   }, []);
 
-  const stats = [
-    { value: '99.9%', label: 'Threat Detection Accuracy', icon: Target },
-    { value: '24/7', label: 'Real-Time Monitoring', icon: Eye },
-    { value: '9+', label: 'Intelligence Sources', icon: Database },
-    { value: '<5min', label: 'Average Response Time', icon: Zap }
+  useEffect(() => {
+    if (globeEl.current) {
+      globeEl.current.controls().autoRotate = true;
+      globeEl.current.controls().autoRotateSpeed = 0.5;
+      setGlobeReady(true);
+    }
+  }, []);
+
+  // Threat locations for globe
+  const threatLocations = [
+    { lat: 40.7128, lng: -74.0060, size: 0.8, color: '#ff6b6b', name: 'North America' },
+    { lat: 51.5074, lng: -0.1278, size: 0.6, color: '#f5576c', name: 'Europe' },
+    { lat: 35.6762, lng: 139.6503, size: 0.9, color: '#ff6b6b', name: 'Asia' },
+    { lat: 25.2048, lng: 55.2708, size: 0.5, color: '#4facfe', name: 'Middle East' },
+    { lat: -23.5505, lng: -46.6333, size: 0.4, color: '#4facfe', name: 'Latin America' },
+    { lat: -1.2864, lng: 36.8172, size: 0.3, color: '#a0aec0', name: 'Africa' },
+    { lat: -33.8688, lng: 151.2093, size: 0.5, color: '#f5576c', name: 'Oceania' }
   ];
 
-  const features = [
+  const coreFeatures = [
     {
       icon: Brain,
-      title: 'AI-Powered Intelligence',
-      description: 'GPT-5 driven analysis extracts IOCs, TTPs, and threat patterns from multiple intelligence feeds automatically.',
-      color: '#667eea'
-    },
-    {
-      icon: Globe,
-      title: 'Geographic Threat Mapping',
-      description: 'Interactive world map visualizes threat distribution across regions with real-time severity indicators.',
-      color: '#f093fb'
+      title: 'AI-Powered Threat Analysis',
+      description: 'GPT-5 automatically analyzes threat intelligence feeds, extracting IOCs, TTPs, and attack patterns in real-time.',
+      features: ['Automated IOC extraction', 'TTP identification', 'Pattern recognition'],
+      color: '#667eea',
+      demo: 'live-analysis'
     },
     {
       icon: Target,
       title: 'Industry-Specific Detection',
-      description: 'Customized threat detection for Finance, Healthcare, Technology, Government, and more sectors.',
-      color: '#4facfe'
+      description: 'Customized threat monitoring for your specific industry, region, and security infrastructure.',
+      features: ['Vertical attack detection', 'Regional targeting', 'Custom profile matching'],
+      color: '#f093fb',
+      demo: 'profile-matching'
     },
     {
-      icon: Lock,
+      icon: Map,
+      title: 'Geographic Threat Mapping',
+      description: 'Interactive world map visualizing global threat distribution with real-time severity indicators.',
+      features: ['Interactive globe view', 'Regional clustering', 'Severity heatmaps'],
+      color: '#4facfe',
+      demo: 'geo-map'
+    },
+    {
+      icon: FileCode,
       title: 'Automated Rule Generation',
-      description: 'Instantly generate deployment-ready Yara and Sigma rules tailored to your security infrastructure.',
-      color: '#f5576c'
+      description: 'Instantly generate deployment-ready Yara and Sigma rules with MITRE ATT&CK mapping.',
+      features: ['Yara rule generation', 'Sigma rule creation', 'MITRE integration'],
+      color: '#43e97b',
+      demo: 'rule-gen'
     },
     {
-      icon: TrendingUp,
-      title: 'Advanced Analytics',
-      description: 'Comprehensive dashboards with trend analysis, severity distribution, and threat actor attribution.',
-      color: '#43e97b'
+      icon: BarChart3,
+      title: 'Advanced Analytics Dashboard',
+      description: 'Comprehensive dashboards with threat trends, severity analysis, and actor attribution.',
+      features: ['Real-time charts', 'Trend analysis', 'Actor tracking'],
+      color: '#fa709a',
+      demo: 'analytics'
     },
     {
-      icon: Shield,
-      title: 'MITRE ATT&CK Integration',
-      description: 'Automatic mapping to MITRE ATT&CK framework with mitigation recommendations for each threat.',
-      color: '#fa709a'
+      icon: Bell,
+      title: 'Real-Time Alerting',
+      description: 'Instant notifications when threats matching your profile are detected across 9+ intelligence sources.',
+      features: ['Multi-source monitoring', 'Smart filtering', 'Priority alerts'],
+      color: '#764ba2',
+      demo: 'alerts'
     }
   ];
 
-  const pricingTiers = [
-    {
-      name: 'Starter',
-      price: 'Free',
-      description: 'Perfect for small teams getting started',
-      features: [
-        'Up to 50 threats monitored',
-        'Basic threat intelligence',
-        'Email alerts',
-        '3 security solutions supported',
-        'Community support'
-      ],
-      cta: 'Start Free',
-      popular: false
-    },
-    {
-      name: 'Professional',
-      price: '$299',
-      period: '/month',
-      description: 'For growing security teams',
-      features: [
-        'Unlimited threat monitoring',
-        'Advanced AI analysis',
-        'Real-time alerts',
-        'All security solutions',
-        'Priority support',
-        'Custom integrations',
-        'API access'
-      ],
-      cta: 'Start 14-Day Trial',
-      popular: true
-    },
-    {
-      name: 'Enterprise',
-      price: 'Custom',
-      description: 'For large organizations',
-      features: [
-        'Everything in Professional',
-        'Dedicated threat analyst',
-        'Custom intelligence sources',
-        'White-label options',
-        'SLA guarantees',
-        '24/7 phone support',
-        'On-premise deployment'
-      ],
-      cta: 'Contact Sales',
-      popular: false
-    }
+  const intelligenceSources = [
+    { name: 'CISA', full: 'Cybersecurity & Infrastructure Security Agency', icon: Shield },
+    { name: 'The Hacker News', full: 'Global Cybersecurity News', icon: Activity },
+    { name: 'BleepingComputer', full: 'Technology News & Support', icon: Database },
+    { name: 'Dark Reading', full: 'Cybersecurity Intelligence', icon: Eye },
+    { name: 'SecurityWeek', full: 'Enterprise Security', icon: Lock },
+    { name: 'Threatpost', full: 'Threat Intelligence', icon: Target },
+    { name: 'Krebs on Security', full: 'In-depth Security News', icon: Brain },
+    { name: 'US-CERT', full: 'United States CERT', icon: Shield },
+    { name: 'Schneier on Security', full: 'Security Analysis', icon: TrendingUp }
   ];
 
-  const trustedBy = [
-    { name: 'Fortune 500', count: '50+' },
-    { name: 'Healthcare Orgs', count: '200+' },
-    { name: 'Financial Institutions', count: '150+' },
-    { name: 'Government Agencies', count: '75+' }
+  const capabilities = [
+    { icon: Zap, label: 'Real-Time Processing', value: '<5min' },
+    { icon: Database, label: 'Intelligence Sources', value: '9+' },
+    { icon: Eye, label: 'Detection Accuracy', value: '99.9%' },
+    { icon: Activity, label: 'Continuous Monitoring', value: '24/7' }
   ];
 
   return (
     <div className="welcome-container">
-      {/* Hero Section */}
-      <section className="hero-section">
+      {/* Hero Section with Interactive Globe */}
+      <section className="hero-section-globe">
         <div className="hero-background">
           <div className="gradient-orb orb-1"></div>
           <div className="gradient-orb orb-2"></div>
           <div className="gradient-orb orb-3"></div>
-          <div className="grid-overlay"></div>
         </div>
         
-        <div className="hero-content">
-          <div className="hero-badge animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            <Shield className="w-4 h-4" />
-            <span>Next-Generation Threat Intelligence Platform</span>
-          </div>
-          
-          <h1 className="hero-title animate-slide-up" style={{ animationDelay: '0.2s' }}>
-            Protect Your Infrastructure with
-            <span className="gradient-text"> AI-Powered Intelligence</span>
-          </h1>
-          
-          <p className="hero-subtitle animate-slide-up" style={{ animationDelay: '0.3s' }}>
-            Intellisecure delivers real-time threat detection, automated security rule generation, 
-            and actionable insights tailored to your industry and infrastructure.
-          </p>
-          
-          <div className="hero-buttons animate-slide-up" style={{ animationDelay: '0.4s' }}>
-            <Button 
-              data-testid="get-started-btn"
-              size="lg" 
-              className="cta-button primary"
-              onClick={() => navigate('/register')}
-            >
-              Get Started Free
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-            <Button 
-              data-testid="login-btn"
-              size="lg" 
-              variant="outline" 
-              className="cta-button secondary"
-              onClick={() => navigate('/login')}
-            >
-              Sign In
-            </Button>
-          </div>
+        <div className="hero-split">
+          <div className="hero-content-left animate-slide-up">
+            <div className="hero-badge">
+              <Sparkles className="w-4 h-4" />
+              <span>AI-Powered Threat Intelligence Platform</span>
+            </div>
+            
+            <h1 className="hero-title-large">
+              <span className="gradient-text-animated">Intellisecure</span>
+            </h1>
+            
+            <h2 className="hero-subtitle-large">
+              Protect Your Infrastructure with Real-Time Threat Intelligence
+            </h2>
+            
+            <p className="hero-description-large">
+              Advanced AI analyzes global cyber threats, generates security rules, and delivers actionable insights tailored to your industry.
+            </p>
+            
+            <div className="hero-buttons-large">
+              <Button 
+                data-testid="get-started-btn"
+                size="lg" 
+                className="cta-button primary large"
+                onClick={() => navigate('/register')}
+              >
+                Get Started Free
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+              <Button 
+                data-testid="login-btn"
+                size="lg" 
+                variant="outline" 
+                className="cta-button secondary large"
+                onClick={() => navigate('/login')}
+              >
+                Sign In
+              </Button>
+            </div>
 
-          <div className="hero-trust animate-slide-up" style={{ animationDelay: '0.5s' }}>
-            <div className="trust-badge">
-              <CheckCircle className="w-5 h-5" />
-              <span>Trusted by 500+ organizations worldwide</span>
+            <div className="hero-capabilities">
+              {capabilities.map((cap, idx) => {
+                const Icon = cap.icon;
+                return (
+                  <div key={idx} className="capability-item">
+                    <Icon className="w-5 h-5" />
+                    <div>
+                      <div className="capability-value">{cap.value}</div>
+                      <div className="capability-label">{cap.label}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
-        
-        <div className="scroll-indicator">
-          <div className="scroll-line"></div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="stats-showcase-section">
-        <div className="stats-showcase-container">
-          <div className="stats-grid">
-            {stats.map((stat, index) => {
-              const Icon = stat.icon;
-              return (
-                <div 
-                  key={index} 
-                  className={`stat-showcase-card ${statsVisible ? 'visible' : ''}`}
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  <div className="stat-icon-wrapper">
-                    <Icon className="w-8 h-8" />
-                  </div>
-                  <h3 className="stat-value-large">{stat.value}</h3>
-                  <p className="stat-label-large">{stat.label}</p>
-                </div>
-              );
-            })}
+          
+          <div className="hero-globe-container">
+            <div className="globe-wrapper">
+              <Globe
+                ref={globeEl}
+                globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+                bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+                backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+                pointsData={threatLocations}
+                pointAltitude={0.01}
+                pointRadius={d => d.size}
+                pointColor={d => d.color}
+                pointLabel={d => `<div style="color: white; background: rgba(0,0,0,0.8); padding: 8px; border-radius: 4px;">${d.name}</div>`}
+                atmosphereColor="#667eea"
+                atmosphereAltitude={0.2}
+                height={600}
+                width={600}
+              />
+            </div>
+            <div className="globe-label">Live Threat Distribution</div>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="features-section-enhanced">
-        <div className="features-container">
-          <div className="section-header">
-            <h2 className="section-title">Enterprise-Grade Security Intelligence</h2>
-            <p className="section-subtitle">Everything you need to stay ahead of cyber threats</p>
+      {/* Core Features Section */}
+      <section className="features-showcase">
+        <div className="features-showcase-container">
+          <div className="section-header-centered">
+            <h2 className="section-title-xl">Core Capabilities</h2>
+            <p className="section-subtitle-xl">Everything you need to stay ahead of cyber threats</p>
           </div>
           
-          <div className="features-grid-enhanced">
-            {features.map((feature, index) => {
+          <div className="features-grid-showcase">
+            {coreFeatures.map((feature, index) => {
               const Icon = feature.icon;
               return (
-                <div 
-                  key={index} 
-                  className={`feature-card-enhanced ${activeFeature === index ? 'active' : ''}`}
-                  onMouseEnter={() => setActiveFeature(index)}
-                >
-                  <div className="feature-icon-enhanced" style={{ background: `linear-gradient(135deg, ${feature.color}, ${feature.color}dd)` }}>
-                    <Icon className="w-8 h-8" />
+                <div key={index} className="feature-showcase-card">
+                  <div className="feature-showcase-header">
+                    <div className="feature-showcase-icon" style={{ background: `linear-gradient(135deg, ${feature.color}, ${feature.color}dd)` }}>
+                      <Icon className="w-8 h-8" />
+                    </div>
+                    <h3>{feature.title}</h3>
                   </div>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.description}</p>
-                  <div className="feature-arrow">
-                    <ArrowRight className="w-5 h-5" />
+                  <p className="feature-showcase-description">{feature.description}</p>
+                  <ul className="feature-showcase-list">
+                    {feature.features.map((item, idx) => (
+                      <li key={idx}>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Intelligence Sources Section */}
+      <section className="sources-showcase">
+        <div className="sources-showcase-container">
+          <div className="section-header-centered">
+            <h2 className="section-title-xl">Multi-Source Intelligence</h2>
+            <p className="section-subtitle-xl">Real-time data aggregation from 9+ leading cybersecurity platforms</p>
+          </div>
+          
+          <div className="sources-grid-enhanced">
+            {intelligenceSources.map((source, index) => {
+              const Icon = source.icon;
+              return (
+                <div key={index} className="source-showcase-card">
+                  <div className="source-icon-wrapper">
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <div className="source-info">
+                    <h4>{source.name}</h4>
+                    <p>{source.full}</p>
                   </div>
                 </div>
               );
@@ -247,174 +256,76 @@ const Welcome = () => {
         </div>
       </section>
 
-      {/* Trusted By Section */}
-      <section className="trusted-section">
-        <div className="trusted-container">
-          <h3 className="trusted-title">Trusted by Industry Leaders</h3>
-          <div className="trusted-grid">
-            {trustedBy.map((item, index) => (
-              <div key={index} className="trusted-item">
-                <div className="trusted-count">{item.count}</div>
-                <div className="trusted-label">{item.name}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Section */}
-      <section className="pricing-section">
-        <div className="pricing-container">
-          <div className="section-header">
-            <h2 className="section-title">Choose Your Plan</h2>
-            <p className="section-subtitle">Flexible pricing for teams of all sizes</p>
+      {/* How It Works Section */}
+      <section className="how-it-works">
+        <div className="how-it-works-container">
+          <div className="section-header-centered">
+            <h2 className="section-title-xl">How It Works</h2>
+            <p className="section-subtitle-xl">Automated threat intelligence in 4 simple steps</p>
           </div>
           
-          <div className="pricing-grid">
-            {pricingTiers.map((tier, index) => (
-              <div key={index} className={`pricing-card ${tier.popular ? 'popular' : ''}`}>
-                {tier.popular && <div className="popular-badge">Most Popular</div>}
-                <div className="pricing-header">
-                  <h3>{tier.name}</h3>
-                  <p className="pricing-description">{tier.description}</p>
-                  <div className="pricing-price">
-                    <span className="price">{tier.price}</span>
-                    {tier.period && <span className="period">{tier.period}</span>}
-                  </div>
-                </div>
-                <ul className="pricing-features">
-                  {tier.features.map((feature, idx) => (
-                    <li key={idx}>
-                      <CheckCircle className="w-5 h-5" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Button 
-                  className={`pricing-cta ${tier.popular ? 'primary' : 'secondary'}`}
-                  onClick={() => navigate('/register')}
-                  data-testid={`pricing-cta-${tier.name.toLowerCase()}`}
-                >
-                  {tier.cta}
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Sources Section */}
-      <section className="sources-section">
-        <div className="sources-container">
-          <h2 className="section-title">Comprehensive Intelligence Sources</h2>
-          <p className="sources-subtitle">Real-time data aggregation from leading cybersecurity platforms</p>
-          
-          <div className="sources-grid">
-            <div className="source-item">
-              <div className="source-logo">CISA</div>
-              <p>Cybersecurity & Infrastructure Security Agency</p>
+          <div className="steps-grid">
+            <div className="step-card">
+              <div className="step-number">1</div>
+              <h3>Profile Creation</h3>
+              <p>Define your company profile including industry, region, and security solutions</p>
             </div>
-            <div className="source-item">
-              <div className="source-logo">THN</div>
-              <p>The Hacker News</p>
+            <div className="step-arrow">
+              <ArrowRight className="w-8 h-8" />
             </div>
-            <div className="source-item">
-              <div className="source-logo">BC</div>
-              <p>BleepingComputer</p>
+            <div className="step-card">
+              <div className="step-number">2</div>
+              <h3>AI Analysis</h3>
+              <p>Our AI continuously monitors and analyzes threats from 9+ intelligence sources</p>
             </div>
-            <div className="source-item">
-              <div className="source-logo">DR</div>
-              <p>Dark Reading</p>
+            <div className="step-arrow">
+              <ArrowRight className="w-8 h-8" />
             </div>
-            <div className="source-item">
-              <div className="source-logo">SW</div>
-              <p>SecurityWeek</p>
+            <div className="step-card">
+              <div className="step-number">3</div>
+              <h3>Smart Matching</h3>
+              <p>Threats are matched to your profile based on industry, region, and infrastructure</p>
             </div>
-            <div className="source-item">
-              <div className="source-logo">TP</div>
-              <p>Threatpost</p>
+            <div className="step-arrow">
+              <ArrowRight className="w-8 h-8" />
             </div>
-            <div className="source-item">
-              <div className="source-logo">KS</div>
-              <p>Krebs on Security</p>
-            </div>
-            <div className="source-item">
-              <div className="source-logo">US-CERT</div>
-              <p>US-CERT Alerts</p>
+            <div className="step-card">
+              <div className="step-number">4</div>
+              <h3>Actionable Rules</h3>
+              <p>Get deployment-ready Yara and Sigma rules with mitigation strategies</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="cta-section-enhanced">
-        <div className="cta-content-enhanced">
-          <div className="cta-icon-wrapper">
-            <Shield className="w-20 h-20" />
+      {/* Final CTA */}
+      <section className="cta-section-final">
+        <div className="cta-content-final">
+          <div className="cta-icon-large">
+            <Shield className="w-24 h-24" />
           </div>
-          <h2>Ready to Secure Your Infrastructure?</h2>
-          <p>Join thousands of security professionals using Intellisecure to stay ahead of cyber threats</p>
-          <div className="cta-buttons">
-            <Button 
-              data-testid="cta-get-started-btn"
-              size="lg" 
-              className="cta-button primary large"
-              onClick={() => navigate('/register')}
-            >
-              Start Free Trial
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              className="cta-button secondary large"
-              onClick={() => window.location.href = 'mailto:sales@intellisecure.ai'}
-            >
-              Contact Sales
-            </Button>
-          </div>
-          <p className="cta-note">No credit card required • 14-day free trial • Cancel anytime</p>
+          <h2>Start Protecting Your Infrastructure Today</h2>
+          <p>Join security professionals using Intellisecure to detect and respond to threats faster</p>
+          <Button 
+            data-testid="cta-get-started-btn"
+            size="lg" 
+            className="cta-button primary xl"
+            onClick={() => navigate('/register')}
+          >
+            Get Started Now
+            <ArrowRight className="w-6 h-6 ml-2" />
+          </Button>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="footer-enhanced">
-        <div className="footer-content">
-          <div className="footer-brand">
-            <div className="footer-logo">
-              <Shield className="w-8 h-8" />
-              <span>Intellisecure</span>
-            </div>
-            <p>Next-generation threat intelligence platform powered by AI</p>
+      {/* Minimal Footer */}
+      <footer className="footer-minimal">
+        <div className="footer-minimal-content">
+          <div className="footer-brand-minimal">
+            <Shield className="w-6 h-6" />
+            <span>Intellisecure</span>
           </div>
-          <div className="footer-links">
-            <div className="footer-column">
-              <h4>Product</h4>
-              <a href="#features">Features</a>
-              <a href="#pricing">Pricing</a>
-              <a href="#sources">Sources</a>
-            </div>
-            <div className="footer-column">
-              <h4>Company</h4>
-              <a href="#about">About</a>
-              <a href="#contact">Contact</a>
-              <a href="#careers">Careers</a>
-            </div>
-            <div className="footer-column">
-              <h4>Legal</h4>
-              <a href="#privacy">Privacy</a>
-              <a href="#terms">Terms</a>
-              <a href="#security">Security</a>
-            </div>
-          </div>
-        </div>
-        <div className="footer-bottom">
-          <p>&copy; 2025 Intellisecure. All rights reserved.</p>
-          <div className="footer-social">
-            <a href="#">LinkedIn</a>
-            <a href="#">Twitter</a>
-            <a href="#">GitHub</a>
-          </div>
+          <p>&copy; 2025 Intellisecure. Advanced Threat Intelligence Platform.</p>
         </div>
       </footer>
     </div>

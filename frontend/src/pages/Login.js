@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Shield } from 'lucide-react';
+import { Shield, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Login = () => {
@@ -37,6 +37,17 @@ const Login = () => {
         <div className="gradient-orb orb-1"></div>
         <div className="gradient-orb orb-2"></div>
       </div>
+      
+      {/* Back to Home Button */}
+      <Button
+        variant="ghost"
+        className="back-to-home-btn"
+        onClick={() => navigate('/')}
+        data-testid="back-to-home-btn"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back to Home
+      </Button>
       
       <div className="auth-content">
         <div className="auth-card">

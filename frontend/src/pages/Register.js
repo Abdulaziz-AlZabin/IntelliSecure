@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Shield } from 'lucide-react';
+import { Shield, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Register = () => {
@@ -60,6 +60,17 @@ const Register = () => {
         <div className="gradient-orb orb-1"></div>
         <div className="gradient-orb orb-2"></div>
       </div>
+      
+      {/* Back to Home Button */}
+      <Button
+        variant="ghost"
+        className="back-to-home-btn"
+        onClick={() => navigate('/')}
+        data-testid="back-to-home-btn"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back to Home
+      </Button>
       
       <div className="auth-content">
         <div className="auth-card register-card">
