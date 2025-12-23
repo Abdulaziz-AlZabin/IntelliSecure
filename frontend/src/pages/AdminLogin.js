@@ -24,7 +24,7 @@ const AdminLogin = () => {
     
     try {
       const response = await axios.post(`${API}/admin/login`, {
-        email: formData.email,
+        username: formData.email,
         password: formData.password
       });
       localStorage.setItem('admin_token', response.data.token);
