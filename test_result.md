@@ -255,7 +255,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "User Dashboard - Display Active Threats"
+    - "Frontend comprehensive testing"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
