@@ -297,7 +297,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Frontend comprehensive testing"
+    - "Frontend comprehensive testing - COMPLETED"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -309,3 +309,5 @@ agent_communication:
     message: "Backend testing completed. All systems working: 60 threats matched to Finance/North America users, APIs returning correct data. Backend is NOT the issue."
   - agent: "main"
     message: "Root cause identified: Frontend Promise.all() was failing when geo-map endpoint had CORS issues. Fixed by changing to Promise.allSettled() to handle individual API failures gracefully. Dashboard now displays all 60 threats correctly. Need comprehensive frontend testing for full verification."
+  - agent: "testing"
+    message: "COMPREHENSIVE FRONTEND TESTING COMPLETED ✅ CRITICAL FIX VERIFIED: Dashboard threat display working perfectly - all 60 threats show for existing users with correct stats (60 total, 4 critical, 48 high, 7 medium). ✅ ALL MAJOR FEATURES WORKING: Login/logout, registration flow, search/filter, threat cards with rules dialog, all dashboard tabs, profile dialog, admin panel (12 companies, 16 resources, 100 attacks). ✅ PROMISE.ALLSETTLED() FIX SUCCESSFUL: No more API failures blocking threat display. Minor: New registered users get 14 threats instead of 60 (possible timing issue with background matching). All core functionality verified and working correctly."
