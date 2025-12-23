@@ -446,6 +446,153 @@ async def export_rules(attack_id: str, rule_type: str, current_user: dict = Depe
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+@api_router.get("/dashboard/weekly-report")
+async def generate_weekly_report(current_user: dict = Depends(get_current_user)):
+    """Generate a PDF report of threats detected in the past week"""
+    profile = await db.profiles.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Get threats from the past week
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    week_ago_str = week_ago.isoformat()
+    
+    matched_attacks = await db.user_attacks.find({
+        "user_id": current_user["id"],
+        "discovered_at": {"$gte": week_ago_str}
+    }, {"_id": 0}).sort("discovered_at", -1).to_list(1000)
+    
+    # Create PDF
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    
+    # Container for PDF elements
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=12,
+        spaceBefore=12
+    )
+    
+    # Title
+    elements.append(Paragraph("Intellisecure Weekly Threat Report", title_style))
+    elements.append(Spacer(1, 12))
+    
+    # Report metadata
+    report_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    elements.append(Paragraph(f"<b>Report Date:</b> {report_date}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Period:</b> {week_ago.strftime('%B %d, %Y')} - {datetime.now(timezone.utc).strftime('%B %d, %Y')}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Company:</b> {profile['company_name']}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Industry:</b> {profile['industry']}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Region:</b> {profile['region']}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    # Executive Summary
+    elements.append(Paragraph("Executive Summary", heading_style))
+    
+    critical_count = len([a for a in matched_attacks if a.get('severity') == 'Critical'])
+    high_count = len([a for a in matched_attacks if a.get('severity') == 'High'])
+    medium_count = len([a for a in matched_attacks if a.get('severity') == 'Medium'])
+    low_count = len([a for a in matched_attacks if a.get('severity') == 'Low'])
+    
+    summary_data = [
+        ['Severity Level', 'Count'],
+        ['Critical', str(critical_count)],
+        ['High', str(high_count)],
+        ['Medium', str(medium_count)],
+        ['Low', str(low_count)],
+        ['Total Threats', str(len(matched_attacks))]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    elements.append(summary_table)
+    elements.append(Spacer(1, 20))
+    
+    # Detailed Threats
+    if matched_attacks:
+        elements.append(Paragraph("Detailed Threat Analysis", heading_style))
+        elements.append(Spacer(1, 12))
+        
+        for i, attack in enumerate(matched_attacks[:20], 1):  # Limit to 20 threats
+            elements.append(Paragraph(f"<b>{i}. {attack['name']}</b>", styles['Heading3']))
+            elements.append(Paragraph(f"<b>Severity:</b> {attack.get('severity', 'Unknown')}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Detected:</b> {datetime.fromisoformat(attack['discovered_at']).strftime('%B %d, %Y %H:%M UTC')}", styles['Normal']))
+            
+            if attack.get('threat_actor'):
+                elements.append(Paragraph(f"<b>Threat Actor:</b> {attack['threat_actor']}", styles['Normal']))
+            
+            elements.append(Paragraph(f"<b>Description:</b> {attack.get('description', 'No description available')}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Source:</b> <link href='{attack.get('source_url', '')}'>{attack.get('source_url', 'N/A')}</link>", styles['Normal']))
+            elements.append(Spacer(1, 12))
+            
+            if i % 5 == 0 and i < len(matched_attacks):
+                elements.append(PageBreak())
+    else:
+        elements.append(Paragraph("No threats detected in the past week.", styles['Normal']))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph("Your security posture remains strong. Continue monitoring for emerging threats.", styles['Normal']))
+    
+    # Recommendations
+    elements.append(PageBreak())
+    elements.append(Paragraph("Recommendations", heading_style))
+    
+    if critical_count > 0 or high_count > 0:
+        elements.append(Paragraph("• <b>Immediate Action Required:</b> Review and address all Critical and High severity threats within 24 hours.", styles['Normal']))
+        elements.append(Spacer(1, 6))
+    
+    elements.append(Paragraph("• <b>Deploy Security Rules:</b> Implement the generated Yara and Sigma rules in your security infrastructure.", styles['Normal']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("• <b>Update Security Policies:</b> Review and update incident response procedures based on detected threat patterns.", styles['Normal']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("• <b>Team Training:</b> Conduct security awareness training for your team on recent threat vectors.", styles['Normal']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("• <b>Continuous Monitoring:</b> Ensure 24/7 monitoring is in place for real-time threat detection.", styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    # Footer
+    elements.append(Paragraph("___", styles['Normal']))
+    elements.append(Paragraph(f"This report was generated by Intellisecure on {report_date}", styles['Normal']))
+    elements.append(Paragraph("For more information, visit your Intellisecure dashboard.", styles['Normal']))
+    
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    filename = f"intellisecure_weekly_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # ==================== INSIGHTS ENDPOINT ====================
 
 @api_router.get("/insights")
