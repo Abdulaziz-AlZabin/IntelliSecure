@@ -161,11 +161,8 @@ const Welcome = () => {
             </div>
           </div>
           
-          <div className="hero-globe-container">
-            <div className="globe-wrapper">
-              <NettedGlobe threatLocations={threatLocations} />
-            </div>
-            <div className="globe-label">Live Threat Distribution</div>
+          <div className="hero-interactive-container">
+            <InteractiveThreatDemo />
           </div>
         </div>
       </section>
