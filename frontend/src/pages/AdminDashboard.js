@@ -287,6 +287,121 @@ const AdminDashboard = () => {
             </div>
           </TabsContent>
 
+          <TabsContent value="threat-hunt-iocs">
+            <div className="threat-hunt-iocs-section">
+              <div className="ioc-stats-header">
+                <h2 className="text-2xl font-bold mb-4">Threat Hunt IOCs</h2>
+                <p className="text-muted-foreground mb-6">
+                  Manage IOCs that will be used to generate threat hunting queries for users
+                </p>
+                <div className="ioc-stats-grid-admin">
+                  <div className="ioc-stat-card">
+                    <span className="stat-label">Total IOCs</span>
+                    <span className="stat-value">{iocStats.total || 0}</span>
+                  </div>
+                  <div className="ioc-stat-card">
+                    <span className="stat-label">IPs</span>
+                    <span className="stat-value">{iocStats.ips || 0}</span>
+                  </div>
+                  <div className="ioc-stat-card">
+                    <span className="stat-label">Domains</span>
+                    <span className="stat-value">{iocStats.domains || 0}</span>
+                  </div>
+                  <div className="ioc-stat-card">
+                    <span className="stat-label">Hashes</span>
+                    <span className="stat-value">{iocStats.hashes || 0}</span>
+                  </div>
+                  <div className="ioc-stat-card">
+                    <span className="stat-label">URLs</span>
+                    <span className="stat-value">{iocStats.urls || 0}</span>
+                  </div>
+                  <div className="ioc-stat-card">
+                    <span className="stat-label">Emails</span>
+                    <span className="stat-value">{iocStats.emails || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <Card className="add-ioc-card">
+                <h3 className="text-lg font-semibold mb-4">Add New IOC</h3>
+                <div className="add-ioc-form">
+                  <Select value={newIOC.type} onValueChange={(value) => setNewIOC({...newIOC, type: value})}>
+                    <SelectTrigger className="ioc-type-select">
+                      <SelectValue placeholder="Select IOC type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ip">IP Address</SelectItem>
+                      <SelectItem value="domain">Domain</SelectItem>
+                      <SelectItem value="hash">File Hash</SelectItem>
+                      <SelectItem value="url">URL</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="IOC Value (e.g., 192.168.1.1, malicious.com, abc123...)"
+                    value={newIOC.value}
+                    onChange={(e) => setNewIOC({...newIOC, value: e.target.value})}
+                    className="ioc-value-input"
+                  />
+                  <Input
+                    placeholder="Description (optional)"
+                    value={newIOC.description}
+                    onChange={(e) => setNewIOC({...newIOC, description: e.target.value})}
+                    className="ioc-description-input"
+                  />
+                  <Input
+                    placeholder="Source (optional)"
+                    value={newIOC.source}
+                    onChange={(e) => setNewIOC({...newIOC, source: e.target.value})}
+                    className="ioc-source-input"
+                  />
+                  <Button onClick={handleAddThreatHuntIOC} className="add-ioc-btn">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add IOC
+                  </Button>
+                </div>
+              </Card>
+
+              <div className="iocs-list">
+                {threatHuntIOCs.length === 0 ? (
+                  <div className="empty-state">
+                    <Target className="w-16 h-16 opacity-20" />
+                    <p>No IOCs added yet</p>
+                    <span className="text-sm">Add IOCs to enable threat hunting queries for users</span>
+                  </div>
+                ) : (
+                  <div className="iocs-grid">
+                    {threatHuntIOCs.map((ioc) => (
+                      <Card key={ioc.id} className="ioc-card">
+                        <div className="ioc-card-header">
+                          <span className={`ioc-type-badge ${ioc.type}`}>{ioc.type.toUpperCase()}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteThreatHuntIOC(ioc.id)}
+                            className="delete-ioc-btn"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="ioc-value">{ioc.value}</div>
+                        {ioc.description && (
+                          <div className="ioc-description">{ioc.description}</div>
+                        )}
+                        {ioc.source && (
+                          <div className="ioc-source">Source: {ioc.source}</div>
+                        )}
+                        <div className="ioc-meta">
+                          Added: {new Date(ioc.created_at).toLocaleString()}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
           <TabsContent value="resources">
             <div className="resources-section">
               <div className="resources-add">
