@@ -417,6 +417,113 @@ const Dashboard = () => {
             </div>
           </TabsContent>
           
+          <TabsContent value="threat-hunt" className="tab-content">
+            <div className="threat-hunt-container">
+              <div className="threat-hunt-header">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Threat Hunting Queries</h2>
+                  <p className="text-muted-foreground">
+                    SIEM queries generated from {threatHuntData?.ioc_stats?.total_iocs || 0} IOCs across {threatHuntData?.ioc_stats?.total_attacks || 0} threats
+                  </p>
+                </div>
+                {threatHuntData && (
+                  <div className="ioc-stats-grid">
+                    <div className="ioc-stat">
+                      <span className="ioc-label">IPs</span>
+                      <span className="ioc-value">{threatHuntData.ioc_stats.ips}</span>
+                    </div>
+                    <div className="ioc-stat">
+                      <span className="ioc-label">Domains</span>
+                      <span className="ioc-value">{threatHuntData.ioc_stats.domains}</span>
+                    </div>
+                    <div className="ioc-stat">
+                      <span className="ioc-label">Hashes</span>
+                      <span className="ioc-value">{threatHuntData.ioc_stats.hashes}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {threatHuntData?.queries ? (
+                <div className="siem-queries-grid">
+                  {/* Splunk Query */}
+                  <div className="siem-query-card">
+                    <div className="siem-query-header">
+                      <div>
+                        <h3 className="text-xl font-semibold">Splunk SPL</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {threatHuntData.queries.splunk?.description || 'Search Processing Language query'}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyQuery(threatHuntData.queries.splunk?.query, 'Splunk')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                    <pre className="siem-query-code">{threatHuntData.queries.splunk?.query}</pre>
+                  </div>
+
+                  {/* Elastic Query */}
+                  <div className="siem-query-card">
+                    <div className="siem-query-header">
+                      <div>
+                        <h3 className="text-xl font-semibold">Elastic KQL</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {threatHuntData.queries.elastic?.description || 'Kibana Query Language'}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyQuery(threatHuntData.queries.elastic?.query, 'Elastic')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                    <pre className="siem-query-code">{threatHuntData.queries.elastic?.query}</pre>
+                  </div>
+
+                  {/* QRadar Query */}
+                  <div className="siem-query-card">
+                    <div className="siem-query-header">
+                      <div>
+                        <h3 className="text-xl font-semibold">QRadar AQL</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {threatHuntData.queries.qradar?.description || 'Ariel Query Language'}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyQuery(threatHuntData.queries.qradar?.query, 'QRadar')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                    <pre className="siem-query-code">{threatHuntData.queries.qradar?.query}</pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <Target className="w-16 h-16 opacity-20" />
+                  <p>Loading threat hunting queries...</p>
+                </div>
+              )}
+
+              {threatHuntData?.last_updated && (
+                <p className="text-sm text-muted-foreground text-center mt-4">
+                  Last updated: {new Date(threatHuntData.last_updated).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </TabsContent>
+          
           <TabsContent value="analytics" className="tab-content">
             <div className="analytics-grid">
               <div className="analytics-card">
