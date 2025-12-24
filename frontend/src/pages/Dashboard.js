@@ -378,13 +378,30 @@ const Dashboard = () => {
                         <span className="threat-date">
                           {new Date(attack.discovered_at).toLocaleString()}
                         </span>
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          data-testid={`view-rules-btn-${attack.attack_id}`}
-                        >
-                          View Details
-                        </Button>
+                        <div className="threat-actions">
+                          <a 
+                            href={attack.source_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`article-link-${attack.attack_id}`}
+                          >
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              View Article
+                            </Button>
+                          </a>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            data-testid={`view-rules-btn-${attack.attack_id}`}
+                          >
+                            View Details
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
