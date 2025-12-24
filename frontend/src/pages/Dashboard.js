@@ -50,8 +50,7 @@ const Dashboard = () => {
         axios.get(`${API}/dashboard/attacks?severity=${severityFilter}`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/insights`),
         axios.get(`${API}/dashboard/analytics`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/dashboard/timeline`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/dashboard/geo-map`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API}/dashboard/timeline`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       // Handle stats
@@ -79,13 +78,6 @@ const Dashboard = () => {
       // Handle timeline
       if (results[4].status === 'fulfilled') {
         setTimeline(results[4].value.data);
-      }
-      
-      // Handle geo-map
-      if (results[5].status === 'fulfilled') {
-        setGeoData(results[5].value.data);
-      } else {
-        console.warn('Geo-map data not available');
       }
       
     } catch (error) {
