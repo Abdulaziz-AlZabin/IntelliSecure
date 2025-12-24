@@ -656,3 +656,108 @@
   overflow-x: auto;
   white-space: pre-wrap;
 }
+
+/* Threat Hunt Section */
+.threat-hunt-container {
+  width: 100%;
+  padding: 1rem;
+}
+
+.threat-hunt-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.ioc-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.ioc-stat {
+  background: rgba(26, 26, 46, 0.6);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ioc-label {
+  font-size: 0.875rem;
+  color: #718096;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.ioc-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.siem-queries-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.siem-query-card {
+  background: rgba(26, 26, 46, 0.6);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.siem-query-card:hover {
+  border-color: rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.1);
+}
+
+.siem-query-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.siem-query-code {
+  background: rgba(15, 15, 26, 0.9);
+  border: 1px solid rgba(102, 126, 234, 0.15);
+  border-radius: 8px;
+  padding: 1.25rem;
+  color: #e5e5ea;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.8;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.siem-query-code::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.siem-query-code::-webkit-scrollbar-track {
+  background: rgba(15, 15, 26, 0.5);
+  border-radius: 4px;
+}
+
+.siem-query-code::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.3);
+  border-radius: 4px;
+}
+
+.siem-query-code::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.5);
+}
