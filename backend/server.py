@@ -888,8 +888,19 @@ async def add_threat_hunt_ioc(ioc: ThreatHuntIOC, admin: dict = Depends(verify_a
     """Add a new IOC for threat hunting"""
     ioc_dict = ioc.model_dump()
     ioc_dict['created_at'] = ioc_dict['created_at'].isoformat()
-    await db.threat_hunt_iocs.insert_one(ioc_dict)
-    return {"message": "IOC added successfully", "ioc": ioc_dict}
+    
+    # Store in database
+    await db.threat_hunt_iocs.insert_one(ioc_dict.copy())
+    
+    # Return without MongoDB _id
+    return {"message": "IOC added successfully", "ioc": {
+        "id": ioc_dict['id'],
+        "type": ioc_dict['type'],
+        "value": ioc_dict['value'],
+        "description": ioc_dict.get('description', ''),
+        "source": ioc_dict.get('source', ''),
+        "created_at": ioc_dict['created_at']
+    }}
 
 @api_router.delete("/admin/threat-hunt-iocs/{ioc_id}")
 async def delete_threat_hunt_ioc(ioc_id: str, admin: dict = Depends(verify_admin)):
