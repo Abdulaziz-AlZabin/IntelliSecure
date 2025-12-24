@@ -837,13 +837,13 @@ async def analyze_with_llm():
         if not unprocessed:
             return
         
-        llm_key = os.environ['EMERGENT_LLM_KEY']
+        gemini_key = os.environ['GEMINI_API_KEY']
         chat = LlmChat(
-            api_key=llm_key,
+            api_key=gemini_key,
             session_id="threat_analysis",
             system_message="""You are a cybersecurity threat intelligence analyst. Analyze threat articles and extract:
 1. Attack name
-2. Description
+2. Description (detailed and comprehensive)
 3. IOCs (IPs, domains, hashes)
 4. TTPs (techniques)
 5. MITRE ATT&CK tactics (e.g., Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Exfiltration, Command and Control, Impact)
@@ -852,11 +852,12 @@ async def analyze_with_llm():
 8. Target regions (North America, Europe, Asia, Middle East, Latin America, Africa, Oceania, or Global)
 9. Affected security solutions (SIEM, EDR, IDS/IPS, Firewall, Antivirus, DLP, or All)
 10. Severity (Critical, High, Medium, Low)
+11. Mitigation recommendations (at least 3 actionable steps)
 
 Return ONLY valid JSON:
 {
   "name": "attack name",
-  "description": "brief description",
+  "description": "detailed comprehensive description",
   "iocs": ["ioc1", "ioc2"],
   "ttps": ["ttp1", "ttp2"],
   "mitre_tactics": ["tactic1", "tactic2"],
@@ -864,19 +865,20 @@ Return ONLY valid JSON:
   "industries": ["industry1"],
   "regions": ["region1"],
   "sec_solutions": ["solution1"],
-  "severity": "High"
+  "severity": "High",
+  "mitigations": ["mitigation step 1", "mitigation step 2", "mitigation step 3"]
 }"""
-        ).with_model("openai", "gpt-4o-mini")
+        ).with_model("gemini", "gemini-2.5-flash")
         
         for article in unprocessed:
             try:
-                prompt = f"""Analyze this cybersecurity threat:
+                prompt = f"""Analyze this cybersecurity threat in detail:
 
 Title: {article['title']}
 URL: {article['url']}
 Summary: {article['summary']}
 
-Extract threat intelligence in JSON format."""
+Provide comprehensive threat intelligence with detailed description and actionable mitigation steps in JSON format."""
                 
                 message = UserMessage(text=prompt)
                 response = await chat.send_message(message)
@@ -903,6 +905,8 @@ Extract threat intelligence in JSON format."""
                     
                     attack_dict = attack.model_dump()
                     attack_dict['discovered_at'] = attack_dict['discovered_at'].isoformat()
+                    # Store mitigations separately
+                    attack_dict['mitigations'] = attack_data.get('mitigations', [])
                     await db.attacks.insert_one(attack_dict)
                     
                     await match_attacks_to_users(attack)
