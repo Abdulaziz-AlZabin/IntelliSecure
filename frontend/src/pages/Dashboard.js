@@ -31,6 +31,7 @@ const Dashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [showProfile, setShowProfile] = useState(false);
+  const [threatHuntData, setThreatHuntData] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
