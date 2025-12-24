@@ -127,6 +127,38 @@ const AdminDashboard = () => {
     navigate('/admin/login');
   };
 
+  const handleAddThreatHuntIOC = async () => {
+    if (!newIOC.value.trim()) {
+      toast.error('IOC value is required');
+      return;
+    }
+
+    const token = localStorage.getItem('admin_token');
+    try {
+      await axios.post(`${API}/admin/threat-hunt-iocs`, newIOC, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('IOC added successfully');
+      setNewIOC({ type: 'ip', value: '', description: '', source: '' });
+      loadAdminData();
+    } catch (error) {
+      toast.error('Failed to add IOC');
+    }
+  };
+
+  const handleDeleteThreatHuntIOC = async (iocId) => {
+    const token = localStorage.getItem('admin_token');
+    try {
+      await axios.delete(`${API}/admin/threat-hunt-iocs/${iocId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('IOC deleted successfully');
+      loadAdminData();
+    } catch (error) {
+      toast.error('Failed to delete IOC');
+    }
+  };
+
   const addIOC = () => {
     setYaraIOCs([...yaraIOCs, { type: 'hash', value: '' }]);
   };
