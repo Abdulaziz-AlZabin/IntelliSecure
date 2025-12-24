@@ -6,7 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Shield, Users, Database, FileCode, Plus, Trash2, LogOut, Building2, Mail, Calendar, Lock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Shield, Users, Database, FileCode, Plus, Trash2, LogOut, Building2, Mail, Calendar, Lock, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
