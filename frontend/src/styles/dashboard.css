@@ -438,6 +438,12 @@
   align-items: center;
 }
 
+.threat-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .threat-date {
   font-size: 0.875rem;
   color: #718096;
