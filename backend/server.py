@@ -612,6 +612,192 @@ async def get_insights():
     insights = await db.threat_intel.find({}, {"_id": 0}).sort("published_at", -1).limit(20).to_list(20)
     return insights
 
+@api_router.get("/dashboard/threat-hunt")
+async def get_threat_hunt_queries(current_user: dict = Depends(get_current_user)):
+    """Generate threat hunting queries for Splunk, Elastic, and QRadar using all IOCs from attacks"""
+    try:
+        # Get all user's matched attacks
+        user_attacks = await db.user_attacks.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(1000)
+        
+        # Collect all IOCs from these attacks
+        all_iocs = {
+            "ips": [],
+            "domains": [],
+            "hashes": [],
+            "urls": [],
+            "emails": []
+        }
+        
+        ioc_count = 0
+        attack_count = len(user_attacks)
+        
+        for user_attack in user_attacks:
+            attack = await db.attacks.find_one({"id": user_attack.get("attack_id")}, {"_id": 0})
+            if attack and attack.get("iocs"):
+                for ioc in attack.get("iocs", []):
+                    ioc_str = str(ioc).strip()
+                    ioc_count += 1
+                    
+                    # Categorize IOCs (simple heuristic)
+                    if "." in ioc_str and any(tld in ioc_str.lower() for tld in [".com", ".net", ".org", ".io", ".ru", ".cn"]):
+                        if ioc_str.startswith("http"):
+                            all_iocs["urls"].append(ioc_str)
+                        elif "@" in ioc_str:
+                            all_iocs["emails"].append(ioc_str)
+                        else:
+                            all_iocs["domains"].append(ioc_str)
+                    elif len(ioc_str) in [32, 40, 64, 128]:  # MD5, SHA1, SHA256, SHA512
+                        all_iocs["hashes"].append(ioc_str)
+                    elif ioc_str.replace(".", "").isdigit() and ioc_str.count(".") == 3:
+                        all_iocs["ips"].append(ioc_str)
+                    else:
+                        # Default to domains if unclear
+                        all_iocs["domains"].append(ioc_str)
+        
+        # Remove duplicates
+        for category in all_iocs:
+            all_iocs[category] = list(set(all_iocs[category]))
+        
+        # Generate SIEM queries using Gemini
+        gemini_key = os.environ['GEMINI_API_KEY']
+        chat = LlmChat(
+            api_key=gemini_key,
+            session_id="threat_hunt_queries",
+            system_message="""You are a cybersecurity SIEM expert. Generate threat hunting queries for different SIEM platforms.
+Create optimized, production-ready queries that security analysts can use immediately.
+Return ONLY valid JSON without any markdown formatting."""
+        ).with_model("gemini", "gemini-2.5-flash")
+        
+        ioc_summary = f"""
+IPs: {len(all_iocs['ips'])} - {all_iocs['ips'][:10]}
+Domains: {len(all_iocs['domains'])} - {all_iocs['domains'][:10]}
+Hashes: {len(all_iocs['hashes'])} - {all_iocs['hashes'][:10]}
+URLs: {len(all_iocs['urls'])} - {all_iocs['urls'][:5]}
+Emails: {len(all_iocs['emails'])} - {all_iocs['emails'][:5]}
+"""
+        
+        prompt = f"""Generate threat hunting queries for these IOCs from {attack_count} security threats:
+
+{ioc_summary}
+
+Create queries for:
+1. Splunk SPL (Search Processing Language)
+2. Elastic (Elasticsearch Query DSL or KQL)
+3. QRadar AQL (Ariel Query Language)
+
+Each query should:
+- Search for any of the IOCs in relevant fields (src_ip, dest_ip, domain, url, hash, etc.)
+- Include time range for last 7 days
+- Be production-ready and optimized
+- Include comments explaining the query
+
+Return as JSON:
+{{
+  "splunk": {{
+    "query": "actual SPL query",
+    "description": "what this query does"
+  }},
+  "elastic": {{
+    "query": "actual KQL or DSL query",
+    "description": "what this query does"
+  }},
+  "qradar": {{
+    "query": "actual AQL query",
+    "description": "what this query does"
+  }}
+}}"""
+        
+        message = UserMessage(text=prompt)
+        response = await chat.send_message(message)
+        
+        # Parse JSON response
+        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+        if json_match:
+            queries = json.loads(json_match.group())
+        else:
+            # Fallback queries if Gemini fails
+            queries = generate_fallback_queries(all_iocs)
+        
+        return {
+            "queries": queries,
+            "ioc_stats": {
+                "total_iocs": ioc_count,
+                "total_attacks": attack_count,
+                "ips": len(all_iocs["ips"]),
+                "domains": len(all_iocs["domains"]),
+                "hashes": len(all_iocs["hashes"]),
+                "urls": len(all_iocs["urls"]),
+                "emails": len(all_iocs["emails"])
+            },
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logging.error(f"Error generating threat hunt queries: {e}")
+        # Return fallback queries
+        return {
+            "queries": {
+                "splunk": {
+                    "query": "index=* (sourcetype=firewall OR sourcetype=proxy OR sourcetype=dns) | stats count by src_ip, dest_ip, url, query",
+                    "description": "Basic threat hunting query across common data sources"
+                },
+                "elastic": {
+                    "query": "event.category:(network OR web OR dns) AND (@timestamp >= now-7d)",
+                    "description": "Search network and web events from last 7 days"
+                },
+                "qradar": {
+                    "query": "SELECT * FROM events WHERE LOGSOURCETYPENAME(logsourceid) IN ('Firewall', 'Proxy', 'DNS') LAST 7 DAYS",
+                    "description": "Query common log sources for last 7 days"
+                }
+            },
+            "ioc_stats": {
+                "total_iocs": 0,
+                "total_attacks": 0,
+                "ips": 0,
+                "domains": 0,
+                "hashes": 0,
+                "urls": 0,
+                "emails": 0
+            },
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "error": str(e)
+        }
+
+def generate_fallback_queries(all_iocs: dict) -> dict:
+    """Generate basic fallback queries when Gemini is unavailable"""
+    ip_list = ", ".join([f'"{ip}"' for ip in all_iocs["ips"][:50]])
+    domain_list = ", ".join([f'"{domain}"' for domain in all_iocs["domains"][:50]])
+    hash_list = ", ".join([f'"{h}"' for h in all_iocs["hashes"][:50]])
+    
+    return {
+        "splunk": {
+            "query": f"""index=* earliest=-7d latest=now 
+(src_ip IN ({ip_list if ip_list else '""'}) OR dest_ip IN ({ip_list if ip_list else '""'}) 
+OR url IN ({domain_list if domain_list else '""'}) OR query IN ({domain_list if domain_list else '""'})
+OR file_hash IN ({hash_list if hash_list else '""'}))
+| table _time, src_ip, dest_ip, url, file_hash, action
+| sort -_time""",
+            "description": "Search for known IOCs across all indexes for the last 7 days"
+        },
+        "elastic": {
+            "query": f"""(source.ip:({' OR '.join(all_iocs['ips'][:50]) if all_iocs['ips'] else '*'}) OR 
+destination.ip:({' OR '.join(all_iocs['ips'][:50]) if all_iocs['ips'] else '*'}) OR
+url.domain:({' OR '.join(all_iocs['domains'][:50]) if all_iocs['domains'] else '*'}) OR
+file.hash.sha256:({' OR '.join(all_iocs['hashes'][:50]) if all_iocs['hashes'] else '*'}))
+AND @timestamp >= now-7d""",
+            "description": "KQL query to search for known IOCs in ECS-formatted logs"
+        },
+        "qradar": {
+            "query": f"""SELECT DATEFORMAT(starttime, 'YYYY-MM-dd HH:mm:ss') as Time,
+sourceip, destinationip, url, username, LOGSOURCENAME(logsourceid)
+FROM events
+WHERE (sourceip IN ({ip_list if ip_list else "'0.0.0.0'"}) 
+OR destinationip IN ({ip_list if ip_list else "'0.0.0.0'"}))
+LAST 7 DAYS""",
+            "description": "AQL query to hunt for known malicious IPs in QRadar"
+        }
+    }
+
 # ==================== ADMIN ENDPOINTS ====================
 
 @api_router.post("/admin/login")
