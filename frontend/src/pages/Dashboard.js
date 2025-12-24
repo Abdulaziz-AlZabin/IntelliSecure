@@ -166,6 +166,11 @@ const Dashboard = () => {
     }
   };
 
+  const handleCopyQuery = (query, platform) => {
+    navigator.clipboard.writeText(query);
+    toast.success(`${platform} query copied to clipboard`);
+  };
+
   const filteredAttacks = attacks.filter(attack => 
     searchTerm ? (
       attack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
