@@ -218,6 +218,10 @@ const AdminDashboard = () => {
               <Users className="w-4 h-4 mr-2" />
               Companies ({companies.length})
             </TabsTrigger>
+            <TabsTrigger value="threat-hunt-iocs" data-testid="threat-hunt-iocs-tab">
+              <Target className="w-4 h-4 mr-2" />
+              Threat Hunt IOCs ({iocStats.total || 0})
+            </TabsTrigger>
             <TabsTrigger value="resources" data-testid="resources-tab">
               <Database className="w-4 h-4 mr-2" />
               Resources ({resources.length})
