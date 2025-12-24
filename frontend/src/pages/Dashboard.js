@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Shield, AlertTriangle, Activity, TrendingUp, LogOut, FileCode, ExternalLink, Download, BarChart3, Clock, Search, Filter, User, FileText } from 'lucide-react';
+import { Shield, AlertTriangle, Activity, TrendingUp, LogOut, FileCode, ExternalLink, Download, BarChart3, Clock, Search, Filter, User, FileText, Copy, Target } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import axios from 'axios';
 import { toast } from 'sonner';
