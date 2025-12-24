@@ -40,14 +40,17 @@ const AdminDashboard = () => {
   const loadAdminData = async () => {
     const token = localStorage.getItem('admin_token');
     try {
-      const [companiesRes, resourcesRes, attacksRes] = await Promise.all([
+      const [companiesRes, resourcesRes, attacksRes, iocsRes] = await Promise.all([
         axios.get(`${API}/admin/companies`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/admin/resources`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/admin/attacks`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API}/admin/attacks`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/admin/threat-hunt-iocs`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       setCompanies(companiesRes.data);
       setResources(resourcesRes.data.sources);
       setAttacks(attacksRes.data);
+      setThreatHuntIOCs(iocsRes.data.iocs);
+      setIocStats(iocsRes.data.stats);
     } catch (error) {
       if (error.response?.status === 401 || error.response?.status === 403) {
         localStorage.removeItem('admin_token');
