@@ -856,6 +856,71 @@ async def get_all_attacks(admin: dict = Depends(verify_admin)):
     attacks = await db.attacks.find({}, {"_id": 0}).sort("discovered_at", -1).limit(100).to_list(100)
     return attacks
 
+# ==================== THREAT HUNT IOC MANAGEMENT ====================
+
+class ThreatHuntIOC(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: str  # ip, domain, hash, url, email
+    value: str
+    description: str = ""
+    source: str = ""
+    added_by: str = "admin"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+@api_router.get("/admin/threat-hunt-iocs")
+async def get_threat_hunt_iocs(admin: dict = Depends(verify_admin)):
+    """Get all curated IOCs for threat hunting"""
+    iocs = await db.threat_hunt_iocs.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    # Get statistics
+    stats = {
+        "total": len(iocs),
+        "ips": len([ioc for ioc in iocs if ioc.get("type") == "ip"]),
+        "domains": len([ioc for ioc in iocs if ioc.get("type") == "domain"]),
+        "hashes": len([ioc for ioc in iocs if ioc.get("type") == "hash"]),
+        "urls": len([ioc for ioc in iocs if ioc.get("type") == "url"]),
+        "emails": len([ioc for ioc in iocs if ioc.get("type") == "email"])
+    }
+    
+    return {"iocs": iocs, "stats": stats}
+
+@api_router.post("/admin/threat-hunt-iocs")
+async def add_threat_hunt_ioc(ioc: ThreatHuntIOC, admin: dict = Depends(verify_admin)):
+    """Add a new IOC for threat hunting"""
+    ioc_dict = ioc.model_dump()
+    ioc_dict['created_at'] = ioc_dict['created_at'].isoformat()
+    await db.threat_hunt_iocs.insert_one(ioc_dict)
+    return {"message": "IOC added successfully", "ioc": ioc_dict}
+
+@api_router.delete("/admin/threat-hunt-iocs/{ioc_id}")
+async def delete_threat_hunt_ioc(ioc_id: str, admin: dict = Depends(verify_admin)):
+    """Delete an IOC from threat hunting collection"""
+    result = await db.threat_hunt_iocs.delete_one({"id": ioc_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="IOC not found")
+    return {"message": "IOC deleted successfully"}
+
+@api_router.post("/admin/threat-hunt-iocs/bulk")
+async def add_bulk_threat_hunt_iocs(iocs_data: dict, admin: dict = Depends(verify_admin)):
+    """Add multiple IOCs at once"""
+    iocs_list = iocs_data.get("iocs", [])
+    added_count = 0
+    
+    for ioc_data in iocs_list:
+        ioc = ThreatHuntIOC(
+            type=ioc_data.get("type"),
+            value=ioc_data.get("value"),
+            description=ioc_data.get("description", ""),
+            source=ioc_data.get("source", "")
+        )
+        ioc_dict = ioc.model_dump()
+        ioc_dict['created_at'] = ioc_dict['created_at'].isoformat()
+        await db.threat_hunt_iocs.insert_one(ioc_dict)
+        added_count += 1
+    
+    return {"message": f"{added_count} IOCs added successfully"}
+
 @api_router.put("/admin/attack/{attack_id}/rules")
 async def update_attack_rules(attack_id: str, rules_data: dict, admin: dict = Depends(verify_admin)):
     # Update Yara rules with IOCs
