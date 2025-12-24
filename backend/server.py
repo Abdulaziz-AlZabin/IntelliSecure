@@ -21,6 +21,12 @@ import feedparser
 import json
 import re
 import io
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -34,6 +40,10 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = os.environ['JWT_ALGORITHM']
 JWT_EXPIRATION_HOURS = int(os.environ['JWT_EXPIRATION_HOURS'])
+
+# Admin credentials
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Aarrafj7##7jfarraA')
 
 # Security
 security = HTTPBearer()
@@ -58,6 +68,14 @@ class UserRegister(BaseModel):
 
 class UserLogin(BaseModel):
     email: EmailStr
+    password: str
+
+class AdminLogin(BaseModel):
+    username: str
+    password: str
+
+class AdminLoginModel(BaseModel):
+    username: str
     password: str
 
 class User(BaseModel):
@@ -132,7 +150,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 # ==================== AUTH ENDPOINTS ====================
 
 @api_router.post("/auth/register")
-async def register(user_data: UserRegister):
+async def register(user_data: UserRegister, background_tasks: BackgroundTasks):
     existing_user = await db.users.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -164,6 +182,9 @@ async def register(user_data: UserRegister):
     profile_dict = profile.model_dump()
     profile_dict['created_at'] = profile_dict['created_at'].isoformat()
     await db.profiles.insert_one(profile_dict)
+    
+    # Match existing attacks to new user immediately
+    background_tasks.add_task(match_user_to_existing_attacks, profile)
     
     token = create_jwt_token(user.id, user.email)
     
@@ -291,12 +312,21 @@ async def get_attack_rules(attack_id: str, current_user: dict = Depends(get_curr
     attack = await db.attacks.find_one({"id": attack_id}, {"_id": 0})
     mitigations = []
     if attack:
-        # Generate basic mitigations based on TTPs
-        for ttp in attack.get('ttps', [])[:3]:
-            mitigations.append({
-                "title": f"Mitigation for {ttp}",
-                "description": f"Implement monitoring and detection for {ttp} activities. Review security policies and access controls."
-            })
+        # Use Gemini-generated mitigations if available
+        gemini_mitigations = attack.get('mitigations', [])
+        if gemini_mitigations:
+            for idx, mitigation_text in enumerate(gemini_mitigations, 1):
+                mitigations.append({
+                    "title": f"Mitigation Step {idx}",
+                    "description": mitigation_text
+                })
+        else:
+            # Fallback to basic mitigations if Gemini mitigations not available
+            for ttp in attack.get('ttps', [])[:3]:
+                mitigations.append({
+                    "title": f"Mitigation for {ttp}",
+                    "description": f"Implement monitoring and detection for {ttp} activities. Review security policies and access controls."
+                })
     
     return {
         "yara_rules": yara_rules,
@@ -428,12 +458,612 @@ async def export_rules(attack_id: str, rule_type: str, current_user: dict = Depe
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+@api_router.get("/dashboard/weekly-report")
+async def generate_weekly_report(current_user: dict = Depends(get_current_user)):
+    """Generate a PDF report of threats detected in the past week"""
+    profile = await db.profiles.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Get threats from the past week
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    week_ago_str = week_ago.isoformat()
+    
+    matched_attacks = await db.user_attacks.find({
+        "user_id": current_user["id"],
+        "discovered_at": {"$gte": week_ago_str}
+    }, {"_id": 0}).sort("discovered_at", -1).to_list(1000)
+    
+    # Create PDF
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    
+    # Container for PDF elements
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=12,
+        spaceBefore=12
+    )
+    
+    # Title
+    elements.append(Paragraph("Intellisecure Weekly Threat Report", title_style))
+    elements.append(Spacer(1, 12))
+    
+    # Report metadata
+    report_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    elements.append(Paragraph(f"<b>Report Date:</b> {report_date}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Period:</b> {week_ago.strftime('%B %d, %Y')} - {datetime.now(timezone.utc).strftime('%B %d, %Y')}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Company:</b> {profile['company_name']}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Industry:</b> {profile['industry']}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Region:</b> {profile['region']}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    # Executive Summary
+    elements.append(Paragraph("Executive Summary", heading_style))
+    
+    critical_count = len([a for a in matched_attacks if a.get('severity') == 'Critical'])
+    high_count = len([a for a in matched_attacks if a.get('severity') == 'High'])
+    medium_count = len([a for a in matched_attacks if a.get('severity') == 'Medium'])
+    low_count = len([a for a in matched_attacks if a.get('severity') == 'Low'])
+    
+    summary_data = [
+        ['Severity Level', 'Count'],
+        ['Critical', str(critical_count)],
+        ['High', str(high_count)],
+        ['Medium', str(medium_count)],
+        ['Low', str(low_count)],
+        ['Total Threats', str(len(matched_attacks))]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    elements.append(summary_table)
+    elements.append(Spacer(1, 20))
+    
+    # Detailed Threats
+    if matched_attacks:
+        elements.append(Paragraph("Detailed Threat Analysis", heading_style))
+        elements.append(Spacer(1, 12))
+        
+        for i, attack in enumerate(matched_attacks[:20], 1):  # Limit to 20 threats
+            elements.append(Paragraph(f"<b>{i}. {attack['name']}</b>", styles['Heading3']))
+            elements.append(Paragraph(f"<b>Severity:</b> {attack.get('severity', 'Unknown')}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Detected:</b> {datetime.fromisoformat(attack['discovered_at']).strftime('%B %d, %Y %H:%M UTC')}", styles['Normal']))
+            
+            if attack.get('threat_actor'):
+                elements.append(Paragraph(f"<b>Threat Actor:</b> {attack['threat_actor']}", styles['Normal']))
+            
+            elements.append(Paragraph(f"<b>Description:</b> {attack.get('description', 'No description available')}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Source:</b> <link href='{attack.get('source_url', '')}'>{attack.get('source_url', 'N/A')}</link>", styles['Normal']))
+            elements.append(Spacer(1, 12))
+            
+            if i % 5 == 0 and i < len(matched_attacks):
+                elements.append(PageBreak())
+    else:
+        elements.append(Paragraph("No threats detected in the past week.", styles['Normal']))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph("Your security posture remains strong. Continue monitoring for emerging threats.", styles['Normal']))
+    
+    # Recommendations
+    elements.append(PageBreak())
+    elements.append(Paragraph("Recommendations", heading_style))
+    
+    if critical_count > 0 or high_count > 0:
+        elements.append(Paragraph("• <b>Immediate Action Required:</b> Review and address all Critical and High severity threats within 24 hours.", styles['Normal']))
+        elements.append(Spacer(1, 6))
+    
+    elements.append(Paragraph("• <b>Deploy Security Rules:</b> Implement the generated Yara and Sigma rules in your security infrastructure.", styles['Normal']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("• <b>Update Security Policies:</b> Review and update incident response procedures based on detected threat patterns.", styles['Normal']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("• <b>Team Training:</b> Conduct security awareness training for your team on recent threat vectors.", styles['Normal']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("• <b>Continuous Monitoring:</b> Ensure 24/7 monitoring is in place for real-time threat detection.", styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    # Footer
+    elements.append(Paragraph("___", styles['Normal']))
+    elements.append(Paragraph(f"This report was generated by Intellisecure on {report_date}", styles['Normal']))
+    elements.append(Paragraph("For more information, visit your Intellisecure dashboard.", styles['Normal']))
+    
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    filename = f"intellisecure_weekly_report_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # ==================== INSIGHTS ENDPOINT ====================
 
 @api_router.get("/insights")
 async def get_insights():
     insights = await db.threat_intel.find({}, {"_id": 0}).sort("published_at", -1).limit(20).to_list(20)
     return insights
+
+@api_router.get("/dashboard/threat-hunt")
+async def get_threat_hunt_queries(current_user: dict = Depends(get_current_user)):
+    """Generate threat hunting queries using admin-curated IOCs"""
+    try:
+        # Get all admin-curated IOCs for threat hunting
+        iocs = await db.threat_hunt_iocs.find({}, {"_id": 0}).to_list(1000)
+        
+        if not iocs:
+            return {
+                "queries": {
+                    "splunk": {
+                        "query": "# No IOCs configured yet. Please contact your administrator to add threat hunting IOCs.",
+                        "description": "No IOCs available for threat hunting"
+                    },
+                    "elastic": {
+                        "query": "# No IOCs configured yet. Please contact your administrator to add threat hunting IOCs.",
+                        "description": "No IOCs available for threat hunting"
+                    },
+                    "qradar": {
+                        "query": "-- No IOCs configured yet. Please contact your administrator to add threat hunting IOCs.",
+                        "description": "No IOCs available for threat hunting"
+                    }
+                },
+                "ioc_stats": {
+                    "total_iocs": 0,
+                    "ips": 0,
+                    "domains": 0,
+                    "hashes": 0,
+                    "urls": 0,
+                    "emails": 0
+                },
+                "last_updated": datetime.now(timezone.utc).isoformat()
+            }
+        
+        # Categorize IOCs
+        all_iocs = {
+            "ips": [ioc["value"] for ioc in iocs if ioc.get("type") == "ip"],
+            "domains": [ioc["value"] for ioc in iocs if ioc.get("type") == "domain"],
+            "hashes": [ioc["value"] for ioc in iocs if ioc.get("type") == "hash"],
+            "urls": [ioc["value"] for ioc in iocs if ioc.get("type") == "url"],
+            "emails": [ioc["value"] for ioc in iocs if ioc.get("type") == "email"]
+        }
+        
+        ioc_count = len(iocs)
+        
+        # Try to generate SIEM queries using Gemini
+        queries = None
+        try:
+            gemini_key = os.environ['GEMINI_API_KEY']
+            chat = LlmChat(
+                api_key=gemini_key,
+                session_id="threat_hunt_queries",
+                system_message="""You are a cybersecurity SIEM expert. Generate threat hunting queries for different SIEM platforms.
+Create optimized, production-ready queries that security analysts can use immediately.
+Return ONLY valid JSON without any markdown formatting."""
+            ).with_model("gemini", "gemini-2.5-flash")
+            
+            ioc_summary = f"""
+Total IOCs: {ioc_count}
+IPs ({len(all_iocs['ips'])}): {all_iocs['ips'][:10]}
+Domains ({len(all_iocs['domains'])}): {all_iocs['domains'][:10]}
+Hashes ({len(all_iocs['hashes'])}): {all_iocs['hashes'][:10]}
+URLs ({len(all_iocs['urls'])}): {all_iocs['urls'][:5]}
+Emails ({len(all_iocs['emails'])}): {all_iocs['emails'][:5]}
+"""
+            
+            prompt = f"""Generate threat hunting queries for these admin-curated IOCs:
+
+{ioc_summary}
+
+Create queries for:
+1. Splunk SPL (Search Processing Language)
+2. Elastic (Elasticsearch Query DSL or KQL)
+3. QRadar AQL (Ariel Query Language)
+
+Each query should:
+- Search for any of the IOCs in relevant fields (src_ip, dest_ip, domain, url, hash, etc.)
+- Include time range for last 7 days
+- Be production-ready and optimized
+- Include comments explaining the query
+
+Return as JSON:
+{{
+  "splunk": {{
+    "query": "actual SPL query",
+    "description": "what this query does"
+  }},
+  "elastic": {{
+    "query": "actual KQL or DSL query",
+    "description": "what this query does"
+  }},
+  "qradar": {{
+    "query": "actual AQL query",
+    "description": "what this query does"
+  }}
+}}"""
+            
+            message = UserMessage(text=prompt)
+            response = await chat.send_message(message)
+            
+            # Parse JSON response
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+            if json_match:
+                queries = json.loads(json_match.group())
+        except Exception as gemini_error:
+            logging.warning(f"Gemini query generation failed, using fallback: {gemini_error}")
+        
+        # Use fallback if Gemini failed or didn't return valid queries
+        if not queries:
+            queries = generate_fallback_queries(all_iocs)
+        
+        return {
+            "queries": queries,
+            "ioc_stats": {
+                "total_iocs": ioc_count,
+                "ips": len(all_iocs["ips"]),
+                "domains": len(all_iocs["domains"]),
+                "hashes": len(all_iocs["hashes"]),
+                "urls": len(all_iocs["urls"]),
+                "emails": len(all_iocs["emails"])
+            },
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logging.error(f"Error generating threat hunt queries: {e}")
+        # Always return fallback queries instead of error
+        try:
+            iocs = await db.threat_hunt_iocs.find({}, {"_id": 0}).to_list(1000)
+            all_iocs = {
+                "ips": [ioc["value"] for ioc in iocs if ioc.get("type") == "ip"],
+                "domains": [ioc["value"] for ioc in iocs if ioc.get("type") == "domain"],
+                "hashes": [ioc["value"] for ioc in iocs if ioc.get("type") == "hash"],
+                "urls": [ioc["value"] for ioc in iocs if ioc.get("type") == "url"],
+                "emails": [ioc["value"] for ioc in iocs if ioc.get("type") == "email"]
+            }
+            queries = generate_fallback_queries(all_iocs)
+            
+            return {
+                "queries": queries,
+                "ioc_stats": {
+                    "total_iocs": len(iocs),
+                    "ips": len(all_iocs["ips"]),
+                    "domains": len(all_iocs["domains"]),
+                    "hashes": len(all_iocs["hashes"]),
+                    "urls": len(all_iocs["urls"]),
+                    "emails": len(all_iocs["emails"])
+                },
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "note": "Using basic queries due to service limitations"
+            }
+        except:
+            # Final fallback
+            return {
+                "queries": {
+                    "splunk": {
+                        "query": "index=* earliest=-7d | stats count by src_ip, dest_ip, url",
+                        "description": "Basic network activity search for last 7 days"
+                    },
+                    "elastic": {
+                        "query": "event.category:network AND @timestamp >= now-7d",
+                        "description": "Network events from last 7 days"
+                    },
+                    "qradar": {
+                        "query": "SELECT * FROM events LAST 7 DAYS",
+                        "description": "All events from last 7 days"
+                    }
+                },
+                "ioc_stats": {
+                    "total_iocs": 0,
+                    "ips": 0,
+                    "domains": 0,
+                    "hashes": 0,
+                    "urls": 0,
+                    "emails": 0
+                },
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "error": "Service temporarily unavailable"
+            }
+
+def generate_fallback_queries(all_iocs: dict) -> dict:
+    """Generate basic fallback queries when Gemini is unavailable"""
+    ip_list = ", ".join([f'"{ip}"' for ip in all_iocs["ips"][:50]])
+    domain_list = ", ".join([f'"{domain}"' for domain in all_iocs["domains"][:50]])
+    hash_list = ", ".join([f'"{h}"' for h in all_iocs["hashes"][:50]])
+    
+    return {
+        "splunk": {
+            "query": f"""index=* earliest=-7d latest=now 
+(src_ip IN ({ip_list if ip_list else '""'}) OR dest_ip IN ({ip_list if ip_list else '""'}) 
+OR url IN ({domain_list if domain_list else '""'}) OR query IN ({domain_list if domain_list else '""'})
+OR file_hash IN ({hash_list if hash_list else '""'}))
+| table _time, src_ip, dest_ip, url, file_hash, action
+| sort -_time""",
+            "description": "Search for known IOCs across all indexes for the last 7 days"
+        },
+        "elastic": {
+            "query": f"""(source.ip:({' OR '.join(all_iocs['ips'][:50]) if all_iocs['ips'] else '*'}) OR 
+destination.ip:({' OR '.join(all_iocs['ips'][:50]) if all_iocs['ips'] else '*'}) OR
+url.domain:({' OR '.join(all_iocs['domains'][:50]) if all_iocs['domains'] else '*'}) OR
+file.hash.sha256:({' OR '.join(all_iocs['hashes'][:50]) if all_iocs['hashes'] else '*'}))
+AND @timestamp >= now-7d""",
+            "description": "KQL query to search for known IOCs in ECS-formatted logs"
+        },
+        "qradar": {
+            "query": f"""SELECT DATEFORMAT(starttime, 'YYYY-MM-dd HH:mm:ss') as Time,
+sourceip, destinationip, url, username, LOGSOURCENAME(logsourceid)
+FROM events
+WHERE (sourceip IN ({ip_list if ip_list else "'0.0.0.0'"}) 
+OR destinationip IN ({ip_list if ip_list else "'0.0.0.0'"}))
+LAST 7 DAYS""",
+            "description": "AQL query to hunt for known malicious IPs in QRadar"
+        }
+    }
+
+# ==================== ADMIN ENDPOINTS ====================
+
+@api_router.post("/admin/login")
+async def admin_login(credentials: AdminLogin):
+    if credentials.username == ADMIN_USERNAME and credentials.password == ADMIN_PASSWORD:
+        token = create_jwt_token("admin", "admin")
+        return {
+            "message": "Admin login successful",
+            "token": token,
+            "user": {"id": "admin", "email": "admin", "role": "admin"}
+        }
+    raise HTTPException(status_code=401, detail="Invalid admin credentials")
+
+async def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = verify_jwt_token(token)
+    if payload.get("user_id") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return payload
+
+@api_router.get("/admin/companies")
+async def get_all_companies(admin: dict = Depends(verify_admin)):
+    profiles = await db.profiles.find({}, {"_id": 0}).to_list(1000)
+    
+    # Enrich with user data
+    for profile in profiles:
+        user = await db.users.find_one({"id": profile["user_id"]}, {"_id": 0, "password_hash": 0})
+        if user:
+            profile["user_email"] = user.get("email")
+            profile["created_at"] = user.get("created_at")
+    
+    return profiles
+
+@api_router.get("/admin/resources")
+async def get_resources(admin: dict = Depends(verify_admin)):
+    return {"sources": THREAT_SOURCES}
+
+@api_router.post("/admin/resources")
+async def add_resource(resource_url: dict, admin: dict = Depends(verify_admin)):
+    url = resource_url.get("url")
+    if url and url not in THREAT_SOURCES:
+        THREAT_SOURCES.append(url)
+        return {"message": "Resource added successfully", "sources": THREAT_SOURCES}
+    raise HTTPException(status_code=400, detail="Invalid or duplicate URL")
+
+@api_router.delete("/admin/resources")
+async def delete_resource(resource_url: dict, admin: dict = Depends(verify_admin)):
+    url = resource_url.get("url")
+    if url in THREAT_SOURCES:
+        THREAT_SOURCES.remove(url)
+        return {"message": "Resource removed successfully", "sources": THREAT_SOURCES}
+    raise HTTPException(status_code=400, detail="URL not found")
+
+@api_router.get("/admin/attacks")
+async def get_all_attacks(admin: dict = Depends(verify_admin)):
+    attacks = await db.attacks.find({}, {"_id": 0}).sort("discovered_at", -1).limit(100).to_list(100)
+    return attacks
+
+# ==================== THREAT HUNT IOC MANAGEMENT ====================
+
+class ThreatHuntIOC(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: str  # ip, domain, hash, url, email
+    value: str
+    description: str = ""
+    source: str = ""
+    added_by: str = "admin"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+@api_router.get("/admin/threat-hunt-iocs")
+async def get_threat_hunt_iocs(admin: dict = Depends(verify_admin)):
+    """Get all curated IOCs for threat hunting"""
+    iocs = await db.threat_hunt_iocs.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    # Get statistics
+    stats = {
+        "total": len(iocs),
+        "ips": len([ioc for ioc in iocs if ioc.get("type") == "ip"]),
+        "domains": len([ioc for ioc in iocs if ioc.get("type") == "domain"]),
+        "hashes": len([ioc for ioc in iocs if ioc.get("type") == "hash"]),
+        "urls": len([ioc for ioc in iocs if ioc.get("type") == "url"]),
+        "emails": len([ioc for ioc in iocs if ioc.get("type") == "email"])
+    }
+    
+    return {"iocs": iocs, "stats": stats}
+
+@api_router.post("/admin/threat-hunt-iocs")
+async def add_threat_hunt_ioc(ioc: ThreatHuntIOC, admin: dict = Depends(verify_admin)):
+    """Add a new IOC for threat hunting"""
+    ioc_dict = ioc.model_dump()
+    ioc_dict['created_at'] = ioc_dict['created_at'].isoformat()
+    
+    # Store in database
+    await db.threat_hunt_iocs.insert_one(ioc_dict.copy())
+    
+    # Return without MongoDB _id
+    return {"message": "IOC added successfully", "ioc": {
+        "id": ioc_dict['id'],
+        "type": ioc_dict['type'],
+        "value": ioc_dict['value'],
+        "description": ioc_dict.get('description', ''),
+        "source": ioc_dict.get('source', ''),
+        "created_at": ioc_dict['created_at']
+    }}
+
+@api_router.delete("/admin/threat-hunt-iocs/{ioc_id}")
+async def delete_threat_hunt_ioc(ioc_id: str, admin: dict = Depends(verify_admin)):
+    """Delete an IOC from threat hunting collection"""
+    result = await db.threat_hunt_iocs.delete_one({"id": ioc_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="IOC not found")
+    return {"message": "IOC deleted successfully"}
+
+@api_router.post("/admin/threat-hunt-iocs/bulk")
+async def add_bulk_threat_hunt_iocs(iocs_data: dict, admin: dict = Depends(verify_admin)):
+    """Add multiple IOCs at once"""
+    iocs_list = iocs_data.get("iocs", [])
+    added_count = 0
+    
+    for ioc_data in iocs_list:
+        ioc = ThreatHuntIOC(
+            type=ioc_data.get("type"),
+            value=ioc_data.get("value"),
+            description=ioc_data.get("description", ""),
+            source=ioc_data.get("source", "")
+        )
+        ioc_dict = ioc.model_dump()
+        ioc_dict['created_at'] = ioc_dict['created_at'].isoformat()
+        await db.threat_hunt_iocs.insert_one(ioc_dict)
+        added_count += 1
+    
+    return {"message": f"{added_count} IOCs added successfully"}
+
+@api_router.put("/admin/attack/{attack_id}/rules")
+async def update_attack_rules(attack_id: str, rules_data: dict, admin: dict = Depends(verify_admin)):
+    # Update Yara rules with IOCs
+    yara_iocs = rules_data.get("yara_iocs", [])
+    attack = await db.attacks.find_one({"id": attack_id}, {"_id": 0})
+    
+    if not attack:
+        raise HTTPException(status_code=404, detail="Attack not found")
+    
+    # Generate enhanced Yara rule with provided IOCs
+    yara_rule_content = f"""rule {attack['name'].replace(' ', '_')}_Detection
+{{
+    meta:
+        description = "{attack['description']}"
+        severity = "{attack['severity']}"
+        threat_actor = "{attack.get('threat_actor', 'Unknown')}"
+        source = "{attack['source_url']}"
+        mitre_tactics = "{', '.join(attack.get('mitre_tactics', []))}"
+        author = "Intellisecure Admin"
+        date = "{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+    
+    strings:"""
+    
+    for i, ioc in enumerate(yara_iocs[:10], 1):
+        if ioc.get('type') == 'hash':
+            yara_rule_content += f'\n        $hash{i} = "{ioc["value"]}"'
+        elif ioc.get('type') == 'ip':
+            yara_rule_content += f'\n        $ip{i} = "{ioc["value"]}"'
+        elif ioc.get('type') == 'domain':
+            yara_rule_content += f'\n        $domain{i} = "{ioc["value"]}"'
+        elif ioc.get('type') == 'string':
+            yara_rule_content += f'\n        $str{i} = "{ioc["value"]}" wide ascii'
+        elif ioc.get('type') == 'filename':
+            yara_rule_content += f'\n        $file{i} = "{ioc["value"]}" nocase'
+    
+    yara_rule_content += """
+    
+    condition:
+        any of them
+}}"""
+    
+    # Update Yara rule in database
+    await db.yara_rules.update_many(
+        {"attack_id": attack_id},
+        {"$set": {"rule_content": yara_rule_content, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Generate enhanced Sigma rule
+    sigma_ttps = rules_data.get("sigma_ttps", attack.get('ttps', []))
+    sigma_rule_content = f"""title: {attack['name']} Detection
+id: {str(uuid.uuid4())}
+status: stable
+description: |
+    {attack['description']}
+    Enhanced rule with specific TTPs and detection patterns.
+author: Intellisecure Admin
+date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+modified: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+references:
+    - {attack['source_url']}
+tags:"""
+    
+    for tactic in attack.get('mitre_tactics', []):
+        sigma_rule_content += f"\n    - attack.{tactic.lower().replace(' ', '_')}"
+    
+    sigma_rule_content += f"""
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_process:"""
+    
+    for i, ttp in enumerate(sigma_ttps[:5], 1):
+        sigma_rule_content += f"\n        - CommandLine|contains: '{ttp}'"
+    
+    sigma_rule_content += """
+    selection_network:"""
+    
+    for ioc in yara_iocs:
+        if ioc.get('type') in ['ip', 'domain']:
+            sigma_rule_content += f"\n        - DestinationHostname|contains: '{ioc['value']}'"
+    
+    sigma_rule_content += """
+    condition: selection_process or selection_network
+falsepositives:
+    - Legitimate administrative activity
+    - Security software updates
+level: """
+    
+    severity_map = {"Critical": "critical", "High": "high", "Medium": "medium", "Low": "low"}
+    sigma_rule_content += severity_map.get(attack['severity'], 'medium')
+    
+    # Update Sigma rule in database
+    await db.sigma_rules.update_many(
+        {"attack_id": attack_id},
+        {"$set": {"rule_content": sigma_rule_content, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {
+        "message": "Rules updated successfully",
+        "yara_rule": yara_rule_content,
+        "sigma_rule": sigma_rule_content
+    }
 
 # ==================== WEB SCRAPING & LLM ANALYSIS ====================
 
@@ -446,7 +1076,13 @@ THREAT_SOURCES = [
     "https://threatpost.com/feed/",
     "https://krebsonsecurity.com/feed/",
     "https://www.us-cert.gov/ncas/current-activity.xml",
-    "https://www.schneier.com/blog/atom.xml"
+    "https://www.schneier.com/blog/atom.xml",
+    "https://www.sans.org/reading-room/whitepapers/rss",
+    "https://www.csoonline.com/feed/",
+    "https://www.infosecurity-magazine.com/rss/news/",
+    "https://nakedsecurity.sophos.com/feed/",
+    "https://grahamcluley.com/feed/",
+    "https://www.cyberscoop.com/feed/"
 ]
 
 async def scrape_threat_feeds():
@@ -456,10 +1092,15 @@ async def scrape_threat_feeds():
                 try:
                     feed = feedparser.parse(source)
                     
-                    for entry in feed.entries[:3]:
+                    for entry in feed.entries[:5]:
                         existing = await db.scraped_data.find_one({"url": entry.link})
                         if existing:
                             continue
+                        
+                        # Get published date
+                        published_date = datetime.now(timezone.utc)
+                        if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                            published_date = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                         
                         scraped_doc = {
                             "id": str(uuid.uuid4()),
@@ -467,7 +1108,7 @@ async def scrape_threat_feeds():
                             "url": entry.link,
                             "summary": entry.get('summary', '')[:500],
                             "source": source,
-                            "published_at": datetime.now(timezone.utc).isoformat(),
+                            "published_at": published_date.isoformat(),
                             "processed": False
                         }
                         await db.scraped_data.insert_one(scraped_doc)
@@ -477,7 +1118,7 @@ async def scrape_threat_feeds():
                             "title": entry.title,
                             "summary": entry.get('summary', '')[:300],
                             "url": entry.link,
-                            "published_at": datetime.now(timezone.utc).isoformat(),
+                            "published_at": published_date.isoformat(),
                             "source": source
                         }
                         await db.threat_intel.insert_one(intel_doc)
@@ -496,13 +1137,13 @@ async def analyze_with_llm():
         if not unprocessed:
             return
         
-        llm_key = os.environ['EMERGENT_LLM_KEY']
+        gemini_key = os.environ['GEMINI_API_KEY']
         chat = LlmChat(
-            api_key=llm_key,
+            api_key=gemini_key,
             session_id="threat_analysis",
             system_message="""You are a cybersecurity threat intelligence analyst. Analyze threat articles and extract:
 1. Attack name
-2. Description
+2. Description (detailed and comprehensive)
 3. IOCs (IPs, domains, hashes)
 4. TTPs (techniques)
 5. MITRE ATT&CK tactics (e.g., Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Exfiltration, Command and Control, Impact)
@@ -511,11 +1152,12 @@ async def analyze_with_llm():
 8. Target regions (North America, Europe, Asia, Middle East, Latin America, Africa, Oceania, or Global)
 9. Affected security solutions (SIEM, EDR, IDS/IPS, Firewall, Antivirus, DLP, or All)
 10. Severity (Critical, High, Medium, Low)
+11. Mitigation recommendations (at least 3 actionable steps)
 
 Return ONLY valid JSON:
 {
   "name": "attack name",
-  "description": "brief description",
+  "description": "detailed comprehensive description",
   "iocs": ["ioc1", "ioc2"],
   "ttps": ["ttp1", "ttp2"],
   "mitre_tactics": ["tactic1", "tactic2"],
@@ -523,19 +1165,20 @@ Return ONLY valid JSON:
   "industries": ["industry1"],
   "regions": ["region1"],
   "sec_solutions": ["solution1"],
-  "severity": "High"
+  "severity": "High",
+  "mitigations": ["mitigation step 1", "mitigation step 2", "mitigation step 3"]
 }"""
-        ).with_model("openai", "gpt-4o-mini")
+        ).with_model("gemini", "gemini-2.5-flash")
         
         for article in unprocessed:
             try:
-                prompt = f"""Analyze this cybersecurity threat:
+                prompt = f"""Analyze this cybersecurity threat in detail:
 
 Title: {article['title']}
 URL: {article['url']}
 Summary: {article['summary']}
 
-Extract threat intelligence in JSON format."""
+Provide comprehensive threat intelligence with detailed description and actionable mitigation steps in JSON format."""
                 
                 message = UserMessage(text=prompt)
                 response = await chat.send_message(message)
@@ -562,6 +1205,8 @@ Extract threat intelligence in JSON format."""
                     
                     attack_dict = attack.model_dump()
                     attack_dict['discovered_at'] = attack_dict['discovered_at'].isoformat()
+                    # Store mitigations separately
+                    attack_dict['mitigations'] = attack_data.get('mitigations', [])
                     await db.attacks.insert_one(attack_dict)
                     
                     await match_attacks_to_users(attack)
@@ -625,6 +1270,122 @@ async def match_attacks_to_users(attack: AttackProfile):
     except Exception as e:
         logging.error(f"Error in match_attacks_to_users: {e}")
 
+async def match_user_to_existing_attacks(profile: CompanyProfile):
+    """Match a new user profile to existing attacks in the database"""
+    try:
+        attacks = await db.attacks.find({}, {"_id": 0}).to_list(1000)
+        
+        for attack in attacks:
+            match_score = 0
+            
+            # Check industry match
+            if profile.tags['industry'] in attack['tags']['industries'] or 'Global' in attack['tags']['industries']:
+                match_score += 1
+            
+            # Check region match
+            if profile.tags['region'] in attack['tags']['regions'] or 'Global' in attack['tags']['regions']:
+                match_score += 1
+            
+            # Check security solutions match
+            for solution in profile.tags['sec_solutions']:
+                if solution in attack['tags']['sec_solutions'] or 'All' in attack['tags']['sec_solutions']:
+                    match_score += 1
+                    break
+            
+            # If match score is 2 or higher, link the attack to the user
+            if match_score >= 2:
+                existing = await db.user_attacks.find_one({
+                    "user_id": profile.user_id,
+                    "attack_id": attack['id']
+                })
+                
+                if not existing:
+                    user_attack = {
+                        "id": str(uuid.uuid4()),
+                        "user_id": profile.user_id,
+                        "attack_id": attack['id'],
+                        "name": attack['name'],
+                        "description": attack['description'],
+                        "severity": attack['severity'],
+                        "source_url": attack['source_url'],
+                        "threat_actor": attack.get('threat_actor'),
+                        "discovered_at": attack['discovered_at'],
+                        "linked_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.user_attacks.insert_one(user_attack)
+                    await generate_rules_for_attack(attack, profile.tags['sec_solutions'])
+                    
+    except Exception as e:
+        logging.error(f"Error in match_user_to_existing_attacks: {e}")
+
+async def generate_rules_for_attack(attack: dict, sec_solutions: List[str]):
+    """Generate rules for a specific attack and user"""
+    try:
+        # Check if rules already exist for this attack
+        existing_yara = await db.yara_rules.find_one({"attack_id": attack['id']})
+        existing_sigma = await db.sigma_rules.find_one({"attack_id": attack['id']})
+        
+        if not existing_yara:
+            yara_rule_content = f"""rule {attack['name'].replace(' ', '_')}_Detection
+{{
+    meta:
+        description = "{attack['description']}"
+        severity = "{attack['severity']}"
+        threat_actor = "{attack.get('threat_actor', 'Unknown')}"
+        source = "{attack['source_url']}"
+        mitre_tactics = "{', '.join(attack.get('mitre_tactics', []))}"
+    
+    strings:
+        $ioc1 = "{attack['iocs'][0] if attack.get('iocs') else 'malicious_indicator'}"
+        $ttp1 = "{attack['ttps'][0] if attack.get('ttps') else 'suspicious_behavior'}"
+    
+    condition:
+        any of them
+}}"""
+            
+            yara_rule = {
+                "id": str(uuid.uuid4()),
+                "attack_id": attack['id'],
+                "rule_name": f"{attack['name'].replace(' ', '_')}_Yara",
+                "rule_content": yara_rule_content
+            }
+            await db.yara_rules.insert_one(yara_rule)
+        
+        if not existing_sigma:
+            sigma_rule_content = f"""title: {attack['name']} Detection
+id: {str(uuid.uuid4())}
+status: experimental
+description: Detects {attack['description']}
+author: Intellisecure AI
+date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
+references:
+    - {attack['source_url']}
+tags:
+    - attack.{attack.get('mitre_tactics', ['unknown'])[0].lower().replace(' ', '_')}
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|contains:
+            - '{attack.get('iocs', ['malicious'])[0]}'
+            - '{attack.get('ttps', ['suspicious'])[0]}'
+    condition: selection
+falsepositives:
+    - Legitimate administrative activity
+level: {attack['severity'].lower()}"""
+            
+            sigma_rule = {
+                "id": str(uuid.uuid4()),
+                "attack_id": attack['id'],
+                "rule_name": f"{attack['name'].replace(' ', '_')}_Sigma",
+                "rule_content": sigma_rule_content
+            }
+            await db.sigma_rules.insert_one(sigma_rule)
+            
+    except Exception as e:
+        logging.error(f"Error generating rules for attack: {e}")
+
 async def generate_rules(attack: AttackProfile, sec_solutions: List[str]):
     try:
         yara_rule_content = f"""rule {attack.name.replace(' ', '_')}_Detection
@@ -652,6 +1413,7 @@ async def generate_rules(attack: AttackProfile, sec_solutions: List[str]):
         }
         await db.yara_rules.insert_one(yara_rule)
         
+        mitre_tag = attack.mitre_tactics[0].lower().replace(' ', '_') if attack.mitre_tactics and len(attack.mitre_tactics) > 0 else 'unknown'
         sigma_rule_content = f"""title: {attack.name} Detection
 id: {str(uuid.uuid4())}
 status: experimental
@@ -661,7 +1423,7 @@ date: {datetime.now(timezone.utc).strftime('%Y/%m/%d')}
 references:
     - {attack.source_url}
 tags:
-    - attack.{attack.mitre_tactics[0].lower().replace(' ', '_') if attack.mitre_tactics else 'unknown'}
+    - attack.{mitre_tag}
 logsource:
     category: process_creation
     product: windows

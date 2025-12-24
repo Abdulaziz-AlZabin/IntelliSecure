@@ -7,9 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Shield, AlertTriangle, Activity, TrendingUp, LogOut, FileCode, ExternalLink, Download, BarChart3, Clock, Search, Filter, User, Settings, Globe } from 'lucide-react';
+import { Shield, AlertTriangle, Activity, TrendingUp, LogOut, FileCode, ExternalLink, Download, BarChart3, Clock, Search, Filter, User, FileText, Copy, Target } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import ThreatMap from '@/components/ThreatMap';
 import axios from 'axios';
 import { toast } from 'sonner';
 
@@ -26,13 +25,13 @@ const Dashboard = () => {
   const [insights, setInsights] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [timeline, setTimeline] = useState([]);
-  const [geoData, setGeoData] = useState(null);
   const [selectedAttack, setSelectedAttack] = useState(null);
   const [rules, setRules] = useState({ yara_rules: [], sigma_rules: [], mitigations: [], mitre_tactics: [] });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [showProfile, setShowProfile] = useState(false);
+  const [threatHuntData, setThreatHuntData] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -45,21 +44,48 @@ const Dashboard = () => {
     if (!token) return;
 
     try {
-      const [statsRes, attacksRes, insightsRes, analyticsRes, timelineRes, geoRes] = await Promise.all([
+      const results = await Promise.allSettled([
         axios.get(`${API}/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/dashboard/attacks?severity=${severityFilter}`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/insights`),
         axios.get(`${API}/dashboard/analytics`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/dashboard/timeline`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/dashboard/geo-map`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API}/dashboard/threat-hunt`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
-      setStats(statsRes.data);
-      setAttacks(attacksRes.data);
-      setInsights(insightsRes.data);
-      setAnalytics(analyticsRes.data);
-      setTimeline(timelineRes.data);
-      setGeoData(geoRes.data);
+      // Handle stats
+      if (results[0].status === 'fulfilled') {
+        setStats(results[0].value.data);
+      }
+      
+      // Handle attacks - critical data
+      if (results[1].status === 'fulfilled') {
+        setAttacks(results[1].value.data);
+        console.log('Attacks loaded:', results[1].value.data.length, 'threats');
+      }
+      
+      // Handle insights
+      if (results[2].status === 'fulfilled') {
+        setInsights(results[2].value.data);
+        console.log('Insights loaded:', results[2].value.data.length, 'items');
+      }
+      
+      // Handle analytics
+      if (results[3].status === 'fulfilled') {
+        setAnalytics(results[3].value.data);
+      }
+      
+      // Handle timeline
+      if (results[4].status === 'fulfilled') {
+        setTimeline(results[4].value.data);
+      }
+      
+      // Handle threat hunt
+      if (results[5].status === 'fulfilled') {
+        setThreatHuntData(results[5].value.data);
+        console.log('Threat hunt queries loaded');
+      }
+      
     } catch (error) {
       console.error('Error loading dashboard:', error);
       if (error.response?.status === 401) {
@@ -118,6 +144,33 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  const handleDownloadWeeklyReport = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get(`${API}/dashboard/weekly-report`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `intellisecure_weekly_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Weekly report downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download report');
+    }
+  };
+
+  const handleCopyQuery = (query, platform) => {
+    navigator.clipboard.writeText(query);
+    toast.success(`${platform} query copied to clipboard`);
+  };
+
   const filteredAttacks = attacks.filter(attack => 
     searchTerm ? (
       attack.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -151,6 +204,15 @@ const Dashboard = () => {
           </div>
           
           <div className="dashboard-user">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={handleDownloadWeeklyReport}
+              data-testid="download-report-btn"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Weekly Report
+            </Button>
             <Button 
               variant="ghost" 
               size="sm"
@@ -247,9 +309,9 @@ const Dashboard = () => {
               <AlertTriangle className="w-4 h-4 mr-2" />
               Active Threats
             </TabsTrigger>
-            <TabsTrigger value="map" data-testid="map-tab">
-              <Globe className="w-4 h-4 mr-2" />
-              Geographic Map
+            <TabsTrigger value="threat-hunt" data-testid="threat-hunt-tab">
+              <Target className="w-4 h-4 mr-2" />
+              Threat Hunt
             </TabsTrigger>
             <TabsTrigger value="analytics" data-testid="analytics-tab">
               <BarChart3 className="w-4 h-4 mr-2" />
@@ -323,13 +385,30 @@ const Dashboard = () => {
                         <span className="threat-date">
                           {new Date(attack.discovered_at).toLocaleString()}
                         </span>
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          data-testid={`view-rules-btn-${attack.attack_id}`}
-                        >
-                          View Details
-                        </Button>
+                        <div className="threat-actions">
+                          <a 
+                            href={attack.source_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`article-link-${attack.attack_id}`}
+                          >
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              View Article
+                            </Button>
+                          </a>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            data-testid={`view-rules-btn-${attack.attack_id}`}
+                          >
+                            View Details
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -338,13 +417,110 @@ const Dashboard = () => {
             </div>
           </TabsContent>
           
-          <TabsContent value="map" className="tab-content map-tab-content">
-            <div className="map-section">
-              <div className="map-header">
-                <h3>Global Threat Distribution</h3>
-                <p>Interactive map showing geographic locations of detected threats</p>
+          <TabsContent value="threat-hunt" className="tab-content">
+            <div className="threat-hunt-container">
+              <div className="threat-hunt-header">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Threat Hunting Queries</h2>
+                  <p className="text-muted-foreground">
+                    SIEM queries generated from {threatHuntData?.ioc_stats?.total_iocs || 0} IOCs across {threatHuntData?.ioc_stats?.total_attacks || 0} threats
+                  </p>
+                </div>
+                {threatHuntData && (
+                  <div className="ioc-stats-grid">
+                    <div className="ioc-stat">
+                      <span className="ioc-label">IPs</span>
+                      <span className="ioc-value">{threatHuntData.ioc_stats.ips}</span>
+                    </div>
+                    <div className="ioc-stat">
+                      <span className="ioc-label">Domains</span>
+                      <span className="ioc-value">{threatHuntData.ioc_stats.domains}</span>
+                    </div>
+                    <div className="ioc-stat">
+                      <span className="ioc-label">Hashes</span>
+                      <span className="ioc-value">{threatHuntData.ioc_stats.hashes}</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <ThreatMap geoData={geoData} />
+
+              {threatHuntData?.queries ? (
+                <div className="siem-queries-grid">
+                  {/* Splunk Query */}
+                  <div className="siem-query-card">
+                    <div className="siem-query-header">
+                      <div>
+                        <h3 className="text-xl font-semibold">Splunk SPL</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {threatHuntData.queries.splunk?.description || 'Search Processing Language query'}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyQuery(threatHuntData.queries.splunk?.query, 'Splunk')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                    <pre className="siem-query-code">{threatHuntData.queries.splunk?.query}</pre>
+                  </div>
+
+                  {/* Elastic Query */}
+                  <div className="siem-query-card">
+                    <div className="siem-query-header">
+                      <div>
+                        <h3 className="text-xl font-semibold">Elastic KQL</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {threatHuntData.queries.elastic?.description || 'Kibana Query Language'}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyQuery(threatHuntData.queries.elastic?.query, 'Elastic')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                    <pre className="siem-query-code">{threatHuntData.queries.elastic?.query}</pre>
+                  </div>
+
+                  {/* QRadar Query */}
+                  <div className="siem-query-card">
+                    <div className="siem-query-header">
+                      <div>
+                        <h3 className="text-xl font-semibold">QRadar AQL</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {threatHuntData.queries.qradar?.description || 'Ariel Query Language'}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyQuery(threatHuntData.queries.qradar?.query, 'QRadar')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                    <pre className="siem-query-code">{threatHuntData.queries.qradar?.query}</pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <Target className="w-16 h-16 opacity-20" />
+                  <p>Loading threat hunting queries...</p>
+                </div>
+              )}
+
+              {threatHuntData?.last_updated && (
+                <p className="text-sm text-muted-foreground text-center mt-4">
+                  Last updated: {new Date(threatHuntData.last_updated).toLocaleString()}
+                </p>
+              )}
             </div>
           </TabsContent>
           
@@ -427,24 +603,32 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <div className="insights-list">
-                  {insights.map((insight) => (
-                    <div key={insight.id} className="insight-card" data-testid={`insight-card-${insight.id}`}>
-                      <h3>{insight.title}</h3>
-                      <p>{insight.summary}</p>
-                      <div className="insight-footer">
-                        <span className="insight-source">{insight.source}</span>
-                        <a 
-                          href={insight.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="insight-link"
-                          data-testid={`insight-link-${insight.id}`}
-                        >
-                          Read more <ExternalLink className="w-4 h-4" />
-                        </a>
+                  {insights.map((insight) => {
+                    const cleanSummary = insight.summary?.replace(/<[^>]*>/g, '').substring(0, 200) || 'No description available';
+                    const cleanSource = insight.source?.split('/')[2] || insight.source;
+                    
+                    return (
+                      <div key={insight.id} className="insight-card" data-testid={`insight-card-${insight.id}`}>
+                        <h3>{insight.title}</h3>
+                        <p>{cleanSummary}...</p>
+                        <div className="insight-footer">
+                          <span className="insight-source">{cleanSource}</span>
+                          <a 
+                            href={insight.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="insight-link-btn"
+                            data-testid={`read-article-btn-${insight.id}`}
+                          >
+                            <Button size="sm" variant="outline">
+                              Read Article
+                              <ExternalLink className="w-4 h-4 ml-2" />
+                            </Button>
+                          </a>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

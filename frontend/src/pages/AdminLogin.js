@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Shield, ArrowLeft } from 'lucide-react';
+import { Shield, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
 
-const Login = () => {
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
+const AdminLogin = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -21,11 +23,15 @@ const Login = () => {
     setLoading(true);
     
     try {
-      await login(formData.email, formData.password);
-      toast.success('Login successful!');
-      navigate('/dashboard');
+      const response = await axios.post(`${API}/admin/login`, {
+        username: formData.email,
+        password: formData.password
+      });
+      localStorage.setItem('admin_token', response.data.token);
+      toast.success('Admin login successful!');
+      navigate('/admin/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Login failed');
+      toast.error('Invalid admin credentials');
     } finally {
       setLoading(false);
     }
@@ -38,35 +44,24 @@ const Login = () => {
         <div className="gradient-orb orb-2"></div>
       </div>
       
-      {/* Back to Home Button */}
-      <Button
-        variant="ghost"
-        className="back-to-home-btn"
-        onClick={() => navigate('/')}
-        data-testid="back-to-home-btn"
-      >
-        <ArrowLeft className="w-4 h-4 mr-2" />
-        Back to Home
-      </Button>
-      
       <div className="auth-content">
         <div className="auth-card">
           <div className="auth-header">
-            <div className="auth-logo">
-              <Shield className="w-10 h-10" />
+            <div className="auth-logo admin-logo">
+              <Lock className="w-10 h-10" />
             </div>
-            <h1>Welcome Back</h1>
-            <p>Sign in to access your security dashboard</p>
+            <h1>Admin Panel</h1>
+            <p>Restricted access - Administrators only</p>
           </div>
           
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">Username</Label>
               <Input
                 id="email"
-                data-testid="login-email-input"
-                type="email"
-                placeholder="your@email.com"
+                data-testid="admin-username-input"
+                type="text"
+                placeholder="admin"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
@@ -77,7 +72,7 @@ const Login = () => {
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
-                data-testid="login-password-input"
+                data-testid="admin-password-input"
                 type="password"
                 placeholder="••••••••"
                 value={formData.password}
@@ -87,22 +82,18 @@ const Login = () => {
             </div>
             
             <Button 
-              data-testid="login-submit-btn"
+              data-testid="admin-login-submit-btn"
               type="submit" 
               className="w-full auth-submit-btn" 
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Authenticating...' : 'Admin Login'}
             </Button>
           </form>
-          
-          <div className="auth-footer">
-            <p>Don't have an account? <Link to="/register" data-testid="register-link">Register here</Link></p>
-          </div>
         </div>
       </div>
     </div>
   );
 };
 
-export default Login;
+export default AdminLogin;

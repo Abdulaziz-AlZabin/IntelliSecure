@@ -1,0 +1,196 @@
+.threat-map-container {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  background: rgba(15, 15, 26, 0.8);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.map-section {
+  width: 100%;
+}
+
+.map-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.map-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.map-header p {
+  color: #a0aec0;
+  font-size: 0.875rem;
+}
+
+.map-tab-content {
+  min-height: 700px;
+}
+
+/* Pulse animation for markers */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* Map Tooltip */
+.map-tooltip {
+  z-index: 1000;
+}
+
+.map-tooltip-content {
+  background: rgba(15, 15, 26, 0.98);
+  border: 1px solid rgba(102, 126, 234, 0.4);
+  border-radius: 12px;
+  padding: 1rem;
+  min-width: 250px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px);
+}
+
+.map-tooltip-content h4 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.25rem;
+}
+
+.tooltip-location {
+  font-size: 0.875rem;
+  color: #667eea;
+  margin-bottom: 0.75rem;
+}
+
+.tooltip-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.tooltip-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+}
+
+.tooltip-stat.critical .stat-value {
+  color: #ff6b6b;
+}
+
+.tooltip-stat.high .stat-value {
+  color: #f5576c;
+}
+
+.tooltip-stat.medium .stat-value {
+  color: #4facfe;
+}
+
+.tooltip-stat .stat-label {
+  color: #a0aec0;
+}
+
+.tooltip-stat .stat-value {
+  color: #fff;
+  font-weight: 600;
+}
+
+.tooltip-attack {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.severity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.severity-dot.critical {
+  background: #ff6b6b;
+}
+
+.severity-dot.high {
+  background: #f5576c;
+}
+
+.severity-dot.medium {
+  background: #4facfe;
+}
+
+.severity-dot.low {
+  background: #a0aec0;
+}
+
+.attack-name {
+  color: #e5e5ea;
+}
+
+.tooltip-more {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* Map Legend */
+.map-legend {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  background: rgba(15, 15, 26, 0.95);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 12px;
+  padding: 1rem;
+  backdrop-filter: blur(20px);
+}
+
+.map-legend h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.75rem;
+}
+
+.legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #a0aec0;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
