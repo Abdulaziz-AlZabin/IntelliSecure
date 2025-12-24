@@ -614,49 +614,48 @@ async def get_insights():
 
 @api_router.get("/dashboard/threat-hunt")
 async def get_threat_hunt_queries(current_user: dict = Depends(get_current_user)):
-    """Generate threat hunting queries for Splunk, Elastic, and QRadar using all IOCs from attacks"""
+    """Generate threat hunting queries using admin-curated IOCs"""
     try:
-        # Get all user's matched attacks
-        user_attacks = await db.user_attacks.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(1000)
+        # Get all admin-curated IOCs for threat hunting
+        iocs = await db.threat_hunt_iocs.find({}, {"_id": 0}).to_list(1000)
         
-        # Collect all IOCs from these attacks
+        if not iocs:
+            return {
+                "queries": {
+                    "splunk": {
+                        "query": "# No IOCs configured yet. Please contact your administrator to add threat hunting IOCs.",
+                        "description": "No IOCs available for threat hunting"
+                    },
+                    "elastic": {
+                        "query": "# No IOCs configured yet. Please contact your administrator to add threat hunting IOCs.",
+                        "description": "No IOCs available for threat hunting"
+                    },
+                    "qradar": {
+                        "query": "-- No IOCs configured yet. Please contact your administrator to add threat hunting IOCs.",
+                        "description": "No IOCs available for threat hunting"
+                    }
+                },
+                "ioc_stats": {
+                    "total_iocs": 0,
+                    "ips": 0,
+                    "domains": 0,
+                    "hashes": 0,
+                    "urls": 0,
+                    "emails": 0
+                },
+                "last_updated": datetime.now(timezone.utc).isoformat()
+            }
+        
+        # Categorize IOCs
         all_iocs = {
-            "ips": [],
-            "domains": [],
-            "hashes": [],
-            "urls": [],
-            "emails": []
+            "ips": [ioc["value"] for ioc in iocs if ioc.get("type") == "ip"],
+            "domains": [ioc["value"] for ioc in iocs if ioc.get("type") == "domain"],
+            "hashes": [ioc["value"] for ioc in iocs if ioc.get("type") == "hash"],
+            "urls": [ioc["value"] for ioc in iocs if ioc.get("type") == "url"],
+            "emails": [ioc["value"] for ioc in iocs if ioc.get("type") == "email"]
         }
         
-        ioc_count = 0
-        attack_count = len(user_attacks)
-        
-        for user_attack in user_attacks:
-            attack = await db.attacks.find_one({"id": user_attack.get("attack_id")}, {"_id": 0})
-            if attack and attack.get("iocs"):
-                for ioc in attack.get("iocs", []):
-                    ioc_str = str(ioc).strip()
-                    ioc_count += 1
-                    
-                    # Categorize IOCs (simple heuristic)
-                    if "." in ioc_str and any(tld in ioc_str.lower() for tld in [".com", ".net", ".org", ".io", ".ru", ".cn"]):
-                        if ioc_str.startswith("http"):
-                            all_iocs["urls"].append(ioc_str)
-                        elif "@" in ioc_str:
-                            all_iocs["emails"].append(ioc_str)
-                        else:
-                            all_iocs["domains"].append(ioc_str)
-                    elif len(ioc_str) in [32, 40, 64, 128]:  # MD5, SHA1, SHA256, SHA512
-                        all_iocs["hashes"].append(ioc_str)
-                    elif ioc_str.replace(".", "").isdigit() and ioc_str.count(".") == 3:
-                        all_iocs["ips"].append(ioc_str)
-                    else:
-                        # Default to domains if unclear
-                        all_iocs["domains"].append(ioc_str)
-        
-        # Remove duplicates
-        for category in all_iocs:
-            all_iocs[category] = list(set(all_iocs[category]))
+        ioc_count = len(iocs)
         
         # Generate SIEM queries using Gemini
         gemini_key = os.environ['GEMINI_API_KEY']
@@ -669,14 +668,15 @@ Return ONLY valid JSON without any markdown formatting."""
         ).with_model("gemini", "gemini-2.5-flash")
         
         ioc_summary = f"""
-IPs: {len(all_iocs['ips'])} - {all_iocs['ips'][:10]}
-Domains: {len(all_iocs['domains'])} - {all_iocs['domains'][:10]}
-Hashes: {len(all_iocs['hashes'])} - {all_iocs['hashes'][:10]}
-URLs: {len(all_iocs['urls'])} - {all_iocs['urls'][:5]}
-Emails: {len(all_iocs['emails'])} - {all_iocs['emails'][:5]}
+Total IOCs: {ioc_count}
+IPs ({len(all_iocs['ips'])}): {all_iocs['ips'][:10]}
+Domains ({len(all_iocs['domains'])}): {all_iocs['domains'][:10]}
+Hashes ({len(all_iocs['hashes'])}): {all_iocs['hashes'][:10]}
+URLs ({len(all_iocs['urls'])}): {all_iocs['urls'][:5]}
+Emails ({len(all_iocs['emails'])}): {all_iocs['emails'][:5]}
 """
         
-        prompt = f"""Generate threat hunting queries for these IOCs from {attack_count} security threats:
+        prompt = f"""Generate threat hunting queries for these admin-curated IOCs:
 
 {ioc_summary}
 
@@ -722,7 +722,6 @@ Return as JSON:
             "queries": queries,
             "ioc_stats": {
                 "total_iocs": ioc_count,
-                "total_attacks": attack_count,
                 "ips": len(all_iocs["ips"]),
                 "domains": len(all_iocs["domains"]),
                 "hashes": len(all_iocs["hashes"]),
@@ -738,21 +737,20 @@ Return as JSON:
         return {
             "queries": {
                 "splunk": {
-                    "query": "index=* (sourcetype=firewall OR sourcetype=proxy OR sourcetype=dns) | stats count by src_ip, dest_ip, url, query",
-                    "description": "Basic threat hunting query across common data sources"
+                    "query": "# Error generating queries. Please check IOC configuration.",
+                    "description": "Query generation failed"
                 },
                 "elastic": {
-                    "query": "event.category:(network OR web OR dns) AND (@timestamp >= now-7d)",
-                    "description": "Search network and web events from last 7 days"
+                    "query": "# Error generating queries. Please check IOC configuration.",
+                    "description": "Query generation failed"
                 },
                 "qradar": {
-                    "query": "SELECT * FROM events WHERE LOGSOURCETYPENAME(logsourceid) IN ('Firewall', 'Proxy', 'DNS') LAST 7 DAYS",
-                    "description": "Query common log sources for last 7 days"
+                    "query": "-- Error generating queries. Please check IOC configuration.",
+                    "description": "Query generation failed"
                 }
             },
             "ioc_stats": {
                 "total_iocs": 0,
-                "total_attacks": 0,
                 "ips": 0,
                 "domains": 0,
                 "hashes": 0,
