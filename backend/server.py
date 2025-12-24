@@ -312,12 +312,21 @@ async def get_attack_rules(attack_id: str, current_user: dict = Depends(get_curr
     attack = await db.attacks.find_one({"id": attack_id}, {"_id": 0})
     mitigations = []
     if attack:
-        # Generate basic mitigations based on TTPs
-        for ttp in attack.get('ttps', [])[:3]:
-            mitigations.append({
-                "title": f"Mitigation for {ttp}",
-                "description": f"Implement monitoring and detection for {ttp} activities. Review security policies and access controls."
-            })
+        # Use Gemini-generated mitigations if available
+        gemini_mitigations = attack.get('mitigations', [])
+        if gemini_mitigations:
+            for idx, mitigation_text in enumerate(gemini_mitigations, 1):
+                mitigations.append({
+                    "title": f"Mitigation Step {idx}",
+                    "description": mitigation_text
+                })
+        else:
+            # Fallback to basic mitigations if Gemini mitigations not available
+            for ttp in attack.get('ttps', [])[:3]:
+                mitigations.append({
+                    "title": f"Mitigation for {ttp}",
+                    "description": f"Implement monitoring and detection for {ttp} activities. Review security policies and access controls."
+                })
     
     return {
         "yara_rules": yara_rules,
