@@ -657,17 +657,19 @@ async def get_threat_hunt_queries(current_user: dict = Depends(get_current_user)
         
         ioc_count = len(iocs)
         
-        # Generate SIEM queries using Gemini
-        gemini_key = os.environ['GEMINI_API_KEY']
-        chat = LlmChat(
-            api_key=gemini_key,
-            session_id="threat_hunt_queries",
-            system_message="""You are a cybersecurity SIEM expert. Generate threat hunting queries for different SIEM platforms.
+        # Try to generate SIEM queries using Gemini
+        queries = None
+        try:
+            gemini_key = os.environ['GEMINI_API_KEY']
+            chat = LlmChat(
+                api_key=gemini_key,
+                session_id="threat_hunt_queries",
+                system_message="""You are a cybersecurity SIEM expert. Generate threat hunting queries for different SIEM platforms.
 Create optimized, production-ready queries that security analysts can use immediately.
 Return ONLY valid JSON without any markdown formatting."""
-        ).with_model("gemini", "gemini-2.5-flash")
-        
-        ioc_summary = f"""
+            ).with_model("gemini", "gemini-2.5-flash")
+            
+            ioc_summary = f"""
 Total IOCs: {ioc_count}
 IPs ({len(all_iocs['ips'])}): {all_iocs['ips'][:10]}
 Domains ({len(all_iocs['domains'])}): {all_iocs['domains'][:10]}
@@ -675,8 +677,8 @@ Hashes ({len(all_iocs['hashes'])}): {all_iocs['hashes'][:10]}
 URLs ({len(all_iocs['urls'])}): {all_iocs['urls'][:5]}
 Emails ({len(all_iocs['emails'])}): {all_iocs['emails'][:5]}
 """
-        
-        prompt = f"""Generate threat hunting queries for these admin-curated IOCs:
+            
+            prompt = f"""Generate threat hunting queries for these admin-curated IOCs:
 
 {ioc_summary}
 
@@ -706,16 +708,19 @@ Return as JSON:
     "description": "what this query does"
   }}
 }}"""
+            
+            message = UserMessage(text=prompt)
+            response = await chat.send_message(message)
+            
+            # Parse JSON response
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+            if json_match:
+                queries = json.loads(json_match.group())
+        except Exception as gemini_error:
+            logging.warning(f"Gemini query generation failed, using fallback: {gemini_error}")
         
-        message = UserMessage(text=prompt)
-        response = await chat.send_message(message)
-        
-        # Parse JSON response
-        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
-        if json_match:
-            queries = json.loads(json_match.group())
-        else:
-            # Fallback queries if Gemini fails
+        # Use fallback if Gemini failed or didn't return valid queries
+        if not queries:
             queries = generate_fallback_queries(all_iocs)
         
         return {
@@ -733,33 +738,59 @@ Return as JSON:
         
     except Exception as e:
         logging.error(f"Error generating threat hunt queries: {e}")
-        # Return fallback queries
-        return {
-            "queries": {
-                "splunk": {
-                    "query": "# Error generating queries. Please check IOC configuration.",
-                    "description": "Query generation failed"
+        # Always return fallback queries instead of error
+        try:
+            iocs = await db.threat_hunt_iocs.find({}, {"_id": 0}).to_list(1000)
+            all_iocs = {
+                "ips": [ioc["value"] for ioc in iocs if ioc.get("type") == "ip"],
+                "domains": [ioc["value"] for ioc in iocs if ioc.get("type") == "domain"],
+                "hashes": [ioc["value"] for ioc in iocs if ioc.get("type") == "hash"],
+                "urls": [ioc["value"] for ioc in iocs if ioc.get("type") == "url"],
+                "emails": [ioc["value"] for ioc in iocs if ioc.get("type") == "email"]
+            }
+            queries = generate_fallback_queries(all_iocs)
+            
+            return {
+                "queries": queries,
+                "ioc_stats": {
+                    "total_iocs": len(iocs),
+                    "ips": len(all_iocs["ips"]),
+                    "domains": len(all_iocs["domains"]),
+                    "hashes": len(all_iocs["hashes"]),
+                    "urls": len(all_iocs["urls"]),
+                    "emails": len(all_iocs["emails"])
                 },
-                "elastic": {
-                    "query": "# Error generating queries. Please check IOC configuration.",
-                    "description": "Query generation failed"
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "note": "Using basic queries due to service limitations"
+            }
+        except:
+            # Final fallback
+            return {
+                "queries": {
+                    "splunk": {
+                        "query": "index=* earliest=-7d | stats count by src_ip, dest_ip, url",
+                        "description": "Basic network activity search for last 7 days"
+                    },
+                    "elastic": {
+                        "query": "event.category:network AND @timestamp >= now-7d",
+                        "description": "Network events from last 7 days"
+                    },
+                    "qradar": {
+                        "query": "SELECT * FROM events LAST 7 DAYS",
+                        "description": "All events from last 7 days"
+                    }
                 },
-                "qradar": {
-                    "query": "-- Error generating queries. Please check IOC configuration.",
-                    "description": "Query generation failed"
-                }
-            },
-            "ioc_stats": {
-                "total_iocs": 0,
-                "ips": 0,
-                "domains": 0,
-                "hashes": 0,
-                "urls": 0,
-                "emails": 0
-            },
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error": str(e)
-        }
+                "ioc_stats": {
+                    "total_iocs": 0,
+                    "ips": 0,
+                    "domains": 0,
+                    "hashes": 0,
+                    "urls": 0,
+                    "emails": 0
+                },
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "error": "Service temporarily unavailable"
+            }
 
 def generate_fallback_queries(all_iocs: dict) -> dict:
     """Generate basic fallback queries when Gemini is unavailable"""
