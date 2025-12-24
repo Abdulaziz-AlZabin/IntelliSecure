@@ -309,6 +309,10 @@ const Dashboard = () => {
               <AlertTriangle className="w-4 h-4 mr-2" />
               Active Threats
             </TabsTrigger>
+            <TabsTrigger value="threat-hunt" data-testid="threat-hunt-tab">
+              <Target className="w-4 h-4 mr-2" />
+              Threat Hunt
+            </TabsTrigger>
             <TabsTrigger value="analytics" data-testid="analytics-tab">
               <BarChart3 className="w-4 h-4 mr-2" />
               Analytics
