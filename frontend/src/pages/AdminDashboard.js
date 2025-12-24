@@ -24,6 +24,9 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [yaraIOCs, setYaraIOCs] = useState([{ type: 'hash', value: '' }]);
   const [sigmaTTPs, setSigmaTTPs] = useState(['']);
+  const [threatHuntIOCs, setThreatHuntIOCs] = useState([]);
+  const [iocStats, setIocStats] = useState({});
+  const [newIOC, setNewIOC] = useState({ type: 'ip', value: '', description: '', source: '' });
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
