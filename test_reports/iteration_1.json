@@ -43,8 +43,5 @@
   "success_percentage": {
     "backend": "100%",
     "frontend": "95%"
-  },
-  
-  "should_call_test_agent_after_fix": "false",
-  "should_main_agent_test_itself": "true"
+  }
 }
